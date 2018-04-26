@@ -8,7 +8,7 @@
 
 ## Usage
 
-Download and run Prefab Explorer's jar. For most people, *double clicking* on the jar file will just work. In the case *double clicking* does not work, run the following command in a console:
+Download and run [Prefab Explorer's jar](https://github.com/achoum/cataclysm_dda_prefab_explorer/releases). For most people, *double clicking* on the jar file will just work. In the case *double clicking* does not work, run the following command in a console:
 
 ~~~~
 java -jar cataclysm_dda_prefab_explorer_0.1.jar

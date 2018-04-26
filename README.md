@@ -1,8 +1,8 @@
 # Prefab Explorer for Cataclysm DDA
 
-**Prefab Explorer for Cataclysm DDA** in an explorer and a visualizer for *prefabs* (i.e. building templates for used by the world generator) of the [Cataclysm: Dark Days Ahead](https://github.com/CleverRaven/Cataclysm-DDA) game.
+**Prefab Explorer for Cataclysm DDA** in an explorer and a visualizer of *prefabs* (i.e. building templates for used by the world generator) for the [Cataclysm: Dark Days Ahead](https://github.com/CleverRaven/Cataclysm-DDA) game.
 
-**Prefab Explorer** was made by reverse engineering the Cataclysm-DDA prefab format, and it is likely that not all (and there are lot) variations and caveats are yet covered. Please submit missing features (with example) in the [Cataclysm-DDA forum](). If you're not able to, send an email to `achoum@gmail.com`.
+**Prefab Explorer** was made by reverse engineering the Cataclysm-DDA prefab format, and it is likely that not all (and there are lot) variations and caveats are not yet covered. Please submit missing features (with example) in the [Cataclysm-DDA forum](). If you're not able to, send an email to `achoum@gmail.com`.
 
 ![Imgur](https://i.imgur.com/rdXzFXX.png)
 

@@ -4,18 +4,18 @@ Version 0.2 (28 April 2018)
 	- Expand all/collapse all button.
 	- Zoom control using the mouse wheel.
 	- Camera motion using mouse.
-	- Tiles color and tags indicate is a element is random (e.g. with "chance" or "repeat").
+	- Tiles color and tags indicate if a element is random (e.g. with "chance" or "repeat").
 	- Preliminary support for iso tilesets (Not yet working).
 	- Highlight of the selected cell. 
 	- Basic editor with the following features
-		- Real refresh of the render from json text editing.
+		- Automatic back and forth sync between the prefab display (with the edit tools) and the json text editor.
 		- Basic get/set terrain value tool.
 		- Show grid.
 		- Hide/show of individual layers (terrain, monsters, items, etc.).
 	
 	Modification
-	- Rename to "Mapgen Explorer"
-	- Labels are more visible.
+	- Rename of the project to "Mapgen Explorer"
+	- Labels are more visible (better colors + contour).
 	- '.' and ' ' are not considered "unknown characters" when non-matched to a palette.
 	
 	Big Fixes

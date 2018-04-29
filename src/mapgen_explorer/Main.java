@@ -12,11 +12,14 @@ public class Main {
 
 	public static File selectWorkingDirectory() {
 		JFileChooser chooser = new JFileChooser();
-		chooser.setCurrentDirectory(new java.io.File("."));
+		String last_main_directory = Config.preferences.get("main_directory",
+				(new java.io.File(".")).getAbsolutePath());
+		chooser.setCurrentDirectory(new File(last_main_directory));
 		chooser.setDialogTitle("Select the Cataclysm DDA directory.");
 		chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
 		chooser.setAcceptAllFileFilterUsed(false);
 		if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+			Config.preferences.put("main_directory", chooser.getSelectedFile().getAbsolutePath());
 			return chooser.getSelectedFile();
 		} else {
 			return null;

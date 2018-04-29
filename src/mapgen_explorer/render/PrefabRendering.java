@@ -11,11 +11,15 @@ import java.awt.font.FontRenderContext;
 import java.awt.font.TextLayout;
 import java.awt.geom.AffineTransform;
 import java.util.ArrayList;
-
+import java.util.HashSet;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
+import mapgen_explorer.render.shape.AbstractShape;
+import mapgen_explorer.render.shape.Line;
+import mapgen_explorer.render.shape.Rect;
 import mapgen_explorer.resources_loader.Palette;
+import mapgen_explorer.resources_loader.Palette.Item;
 import mapgen_explorer.resources_loader.Resources;
 import mapgen_explorer.resources_loader.Tiles;
 import mapgen_explorer.resources_loader.Tiles.RenderTile;
@@ -33,6 +37,8 @@ public class PrefabRendering {
 	public int num_cols = 0;
 	// Grid cell of the prefab. Row major.
 	public Cell[] cells = null;
+	// Shapes.
+	public ArrayList<AbstractShape> shapes = new ArrayList<>();
 	// Parsed prefab json object.
 	public JSONObject json_prefab;
 	// Palette. Contains both the items defined in the prefab, and the items in the remote palette.
@@ -46,15 +52,15 @@ public class PrefabRendering {
 		public int x_px, y_px;
 		public int col, row;
 		public String value;
-		public Color color;
+		public eLayer layer;
 
-		public Label(String value, int x_px, int y_px, int col, int row, Color color) {
+		public Label(String value, int x_px, int y_px, int col, int row, eLayer layer) {
 			this.value = value;
 			this.x_px = x_px;
 			this.y_px = y_px;
 			this.col = col;
 			this.row = row;
-			this.color = color;
+			this.layer = layer;
 		}
 	}
 
@@ -74,12 +80,16 @@ public class PrefabRendering {
 	}
 
 	// Get a cell index from its coordinates.
-	public int cellIdx(int row, int col) {
+	public int cellIdx(int row, int col) throws Exception {
+		if (row < 0 || row >= num_rows || col < 0 || col >= num_cols) {
+			throw new Exception("Out of bound cell index " + row + ";" + col);
+		}
 		return col + row * num_cols;
 	}
 
 	// Recompute the rendering structure i.e. parse the json object.
 	public void update() throws Exception {
+		shapes.clear();
 		JSONObject json_object = (JSONObject) json_prefab.get("object");
 		// Terrain.
 		updateTerrain(json_object);
@@ -104,64 +114,149 @@ public class PrefabRendering {
 				Cell cell = new Cell();
 				cells[cellIdx(row_idx, col_idx)] = cell;
 				cell.character = row.charAt(col_idx);
-				if (fill_ter != null) {
-					if (render_filter.isLayerVisible(eLayer.FILL_TER)) {
-						Resources.tiles.appendTiles(cell.tiles, fill_ter, json_row, row_idx,
-								col_idx, false, render_filter, palette);
-					}
+
+				if (cell.character == '#') {
+					int a = 50;
 				}
-				Palette.Cell palette_cell = palette.char_to_id.get(cell.character);
-				if (palette_cell != null) {
-					Resources.tiles.appendTiles(cell.tiles, palette_cell, json_row, row_idx,
-							col_idx, render_filter, palette);
-				} else if (cell.character != ' ' && cell.character != '.') {
-					cell.unknow_cell_character = true;
+
+				ArrayList<Item> palette_item_set = palette.char_to_id.get(cell.character);
+				if (palette_item_set == null) {
+					Resources.tiles.appendTilesFromSymbol(cell.tiles, fill_ter, json_row, row_idx,
+							col_idx, false, palette, RenderFilter.eLayer.TERRAIN);
+					if (cell.character != ' ' && cell.character != '.') {
+						Logger.consoleWarnings(
+								"Unknown symbol \"" + Character.toString(cell.character) + "\"");
+						Resources.tiles.appendTilesFromSymbol(cell.tiles,
+								Character.toString(cell.character), json_row, row_idx, col_idx,
+								false, palette, RenderFilter.eLayer.TERRAIN);
+					}
+				} else {
+					boolean has_terrain_palette_item = false;
+					for (Item palette_item : palette_item_set) {
+						if (palette_item.layer == eLayer.TERRAIN) {
+							has_terrain_palette_item = true;
+							break;
+						}
+					}
+					if (fill_ter != null && !has_terrain_palette_item) {
+						Resources.tiles.appendTilesFromSymbol(cell.tiles, fill_ter, json_row,
+								row_idx, col_idx, false, palette, RenderFilter.eLayer.TERRAIN);
+					}
+
+					for (Item palette_item : palette_item_set) {
+						if (palette_item != null) {
+							boolean success = Resources.tiles.appendTilesFromPaletteItem(cell.tiles,
+									palette_item, json_row, row_idx, col_idx, palette,
+									palette_item.layer);
+
+							if (!success && palette_item.layer == eLayer.TERRAIN) {
+								Resources.tiles.appendTilesFromSymbol(cell.tiles, fill_ter,
+										json_row, row_idx, col_idx, false, palette,
+										RenderFilter.eLayer.TERRAIN);
+							}
+
+						} else if (cell.character != ' ' && cell.character != '.') {
+							// Unknown symbol.
+							cell.unknow_cell_character = true;
+						}
+					}
+
+					if (cell.tiles.isEmpty()) {
+						Resources.tiles.appendTilesFromSymbol(cell.tiles, fill_ter, json_row,
+								row_idx, col_idx, false, palette, RenderFilter.eLayer.TERRAIN);
+					}
+
 				}
 			}
 		}
 	}
 
-	public void updateItems(JSONObject json_object) {
-		JSONArray set = (JSONArray) json_object.get("set");
-		if (set != null) {
-			for (int item_idx = 0; item_idx < set.size(); item_idx++) {
-				JSONObject item = (JSONObject) set.get(item_idx);
-				renderItem(json_object, item);
+	public void updateItems(JSONObject json_object) throws Exception {
+
+		updatItems(json_object, "set", RenderFilter.eLayer.TERRAIN, null);
+		updatItems(json_object, "add", RenderFilter.eLayer.ITEMS, null);
+		updatItems(json_object, "place_terrain", RenderFilter.eLayer.TERRAIN, null);
+		updatItems(json_object, "place_items", RenderFilter.eLayer.ITEMS, null);
+		updatItems(json_object, "place_loot", RenderFilter.eLayer.LOOT, null);
+		updatItems(json_object, "place_monsters", RenderFilter.eLayer.MONSTER, null);
+		updatItems(json_object, "place_monster", RenderFilter.eLayer.MONSTER, null);
+		updatItems(json_object, "place_npcs", RenderFilter.eLayer.NPC, null);
+		updatItems(json_object, "place_npc", RenderFilter.eLayer.NPC, null);
+		updatItems(json_object, "place_fields", RenderFilter.eLayer.FIELD, null);
+		updatItems(json_object, "place_rubble", RenderFilter.eLayer.TERRAIN, "rubble");
+		updatItems(json_object, "place_vehicles", RenderFilter.eLayer.VEHICULE, null);
+		updatItems(json_object, "place_vendingmachines", RenderFilter.eLayer.VENDING_MACHINE,
+				"vendingmachines");
+		updatItems(json_object, "place_signs", RenderFilter.eLayer.SIGN, "sign");
+		updatItems(json_object, "place_liquids", RenderFilter.eLayer.LIQUID, null);
+		updatItems(json_object, "place_toilets", RenderFilter.eLayer.TOILETS, "toilet");
+		updatItems(json_object, "place_gaspumps", RenderFilter.eLayer.GASPUMP, "gaspump");
+		updatItems(json_object, "place_furniture", RenderFilter.eLayer.FURNITURE, null);
+		updatItems(json_object, "place_traps", RenderFilter.eLayer.TRAP, null);
+
+		HashSet<String> known_placements = new HashSet<>();
+		known_placements.add("set");
+		known_placements.add("add");
+		known_placements.add("place_terrain");
+		known_placements.add("place_items");
+		known_placements.add("place_loot");
+		known_placements.add("place_monsters");
+		known_placements.add("place_monster");
+		known_placements.add("place_npcs");
+		known_placements.add("place_npc");
+		known_placements.add("place_fields");
+		known_placements.add("place_rubble");
+		known_placements.add("place_vehicles");
+		known_placements.add("place_vendingmachines");
+		known_placements.add("place_signs");
+		known_placements.add("place_liquids");
+		known_placements.add("place_toilets");
+		known_placements.add("place_gaspumps");
+		known_placements.add("place_furniture");
+		known_placements.add("place_traps");
+
+		for (Object entry : json_object.keySet()) {
+			String str_entry = (String) entry;
+			if (str_entry.startsWith("place_") && !known_placements.contains(str_entry)) {
+				Logger.consoleWarnings(
+						"Unknown placement type: " + str_entry + " : " + json_object.get(entry));
+				updatItems(json_object, str_entry, RenderFilter.eLayer.ITEMS, str_entry + " [U]");
 			}
 		}
-		JSONArray place_items = (JSONArray) json_object.get("place_items");
-		if (place_items != null) {
-			for (int item_idx = 0; item_idx < place_items.size(); item_idx++) {
-				JSONObject item = (JSONObject) place_items.get(item_idx);
-				renderItem(json_object, item);
-			}
-		}
-		JSONArray place_monsters = (JSONArray) json_object.get("place_monsters");
-		if (place_monsters != null) {
-			for (int item_idx = 0; item_idx < place_monsters.size(); item_idx++) {
-				JSONObject item = (JSONObject) place_monsters.get(item_idx);
-				renderItem(json_object, item);
+
+	}
+
+	void updatItems(JSONObject json_object, String place_key, RenderFilter.eLayer layer,
+			String last_resort_name) throws Exception {
+		JSONArray places = (JSONArray) json_object.get(place_key);
+		if (places != null) {
+			for (int item_idx = 0; item_idx < places.size(); item_idx++) {
+				JSONObject item = (JSONObject) places.get(item_idx);
+				renderItem(json_object, item, layer, last_resort_name);
 			}
 		}
 	}
 
 	// Generate a list of position from a line position json object.
-	void genCandidateLinePositions(JSONObject item, ArrayList<Vector2i> candidates) {
-		int x1 = (int) (long) item.get("x");
-		int y1 = (int) (long) item.get("y");
-		int x2 = (int) (long) item.get("x2");
-		int y2 = (int) (long) item.get("y2");
-		Geometry.callOnLine(new Vector2i(x1, y1), new Vector2i(x2, y2),
+	Line genCandidateLinePositions(JSONObject item, ArrayList<Vector2i> candidates) {
+		Line line = new Line();
+		line.x1 = (int) (long) item.get("x");
+		line.y1 = (int) (long) item.get("y");
+		line.x2 = (int) (long) item.get("x2");
+		line.y2 = (int) (long) item.get("y2");
+		Geometry.callOnLine(new Vector2i(line.x1, line.y1), new Vector2i(line.x2, line.y2),
 				new Geometry.PointCallback() {
 					@Override
 					public void iter(int x, int y) {
 						candidates.add(new Vector2i(x, y));
 					}
 				});
+		return line;
 	}
 
 	// Generate a list of position from a generic position json object.
-	void genCandidateRectPositions(JSONObject item, ArrayList<Vector2i> candidates) {
+	Rect genCandidateRectPositions(JSONObject item, ArrayList<Vector2i> candidates)
+			throws Exception {
 		int x1 = 0, x2 = 0, y1 = 0, y2 = 0;
 		Object json_x = item.get("x");
 		if (json_x instanceof JSONArray) {
@@ -175,7 +270,7 @@ public class PrefabRendering {
 		} else if (json_x instanceof Long) {
 			x1 = x2 = (int) (long) json_x;
 		} else {
-			Logger.fatal("Unsupported type:" + json_x);
+			throw new Exception("Unsupported type:" + json_x);
 		}
 		Object json_y = item.get("y");
 		if (json_y instanceof JSONArray) {
@@ -189,7 +284,7 @@ public class PrefabRendering {
 		} else if (json_y instanceof Long) {
 			y1 = y2 = (int) (long) json_y;
 		} else {
-			Logger.fatal("Unsupported type:" + json_y);
+			throw new Exception("Unsupported type:" + json_y);
 		}
 		if (x1 > x2) {
 			int swap = x1;
@@ -206,52 +301,67 @@ public class PrefabRendering {
 				candidates.add(new Vector2i(x, y));
 			}
 		}
+		Rect rect = new Rect();
+		rect.x1 = x1;
+		rect.x2 = x2;
+		rect.y1 = y1;
+		rect.y2 = y2;
+		return rect;
 	}
 
-	void renderItem(JSONObject json_object, JSONObject item) {
+	void renderItem(JSONObject json_object, JSONObject item, RenderFilter.eLayer layer,
+			String last_resort_name) throws Exception {
+
 		// Get the candidate positions.
 		ArrayList<Vector2i> candidates = new ArrayList<Vector2i>();
-		String alt_id = null;
-		String line = (String) item.get("line");
-		if (line != null) {
-			if (render_filter.isLayerVisible(eLayer.POINTS_AND_LINES)) {
-				alt_id = line;
-				genCandidateLinePositions(item, candidates);
-			}
-		} else {
+		String final_id = null;
+
+		AbstractShape shape = null;
+
+		if (item.containsKey("line")) {
+			String line = (String) item.get("line");
+			final_id = line;
+			shape = genCandidateLinePositions(item, candidates);
+		} else if (item.containsKey("point")) {
 			String point = (String) item.get("point");
-			String json_item = (String) item.get("item");
-			String monster = (String) item.get("monster");
-			if (monster != null) {
-				if (render_filter.isLayerVisible(eLayer.MONSTERS)) {
-					alt_id = monster;
+			final_id = point;
+			shape = genCandidateRectPositions(item, candidates);
+		} else if (item.containsKey("square")) {
+			String square = (String) item.get("square");
+			final_id = square;
+			shape = genCandidateRectPositions(item, candidates);
+		} else {
+			final_id = (String) item.get(layer.key_id);
+			shape = genCandidateRectPositions(item, candidates);
+		}
+
+		if (item.containsKey("id")) {
+			final_id = (String) item.get("id");
+		}
+
+		if (final_id == null) {
+			for (String new_try : new String[] { "group" }) {
+				String candidate_id = (String) item.get(new_try);
+				if (candidate_id != null) {
+					final_id = candidate_id;
+					break;
 				}
-			}
-			if (point != null) {
-				if (render_filter.isLayerVisible(eLayer.POINTS_AND_LINES)) {
-					alt_id = point;
-				}
-			}
-			if (json_item != null) {
-				if (render_filter.isLayerVisible(eLayer.ITEMS)) {
-					alt_id = json_item;
-				}
-			}
-			if (monster != null || point != null || json_item != null) {
-				genCandidateRectPositions(item, candidates);
 			}
 		}
-		if (candidates.isEmpty())
-			return;
+
+		if (final_id == null) {
+			if (last_resort_name != null) {
+				final_id = last_resort_name;
+			} else {
+				Logger.consoleWarnings("Cannot find the key for : " + item);
+				final_id = "unknown";
+			}
+		}
+
+		shape.label = final_id;
+		shape.layer = layer;
 
 		JSONArray json_row = (JSONArray) json_object.get("rows");
-		String id = (String) item.get("id");
-		if (id == null) {
-			id = alt_id;
-		}
-		if (id == null) {
-			return;
-		}
 
 		// TODO: Make the sampling more efficient.
 
@@ -259,10 +369,11 @@ public class PrefabRendering {
 		boolean candidate_are_random = false;
 
 		// Sub-sampling of the candidate positions with "repeat".
-		int num_to_keep = 0;
+		int num_to_keep = -1;
 		Object repeat_object = item.get("repeat");
 		if (repeat_object instanceof Long) {
 			num_to_keep = (int) (long) repeat_object;
+			shape.repeat_max = shape.repeat_min = num_to_keep;
 		} else if (repeat_object instanceof JSONArray) {
 			JSONArray repeat = (JSONArray) repeat_object;
 			int repeat_min = (int) (long) repeat.get(0);
@@ -273,8 +384,15 @@ public class PrefabRendering {
 				repeat_min = swap;
 			}
 			num_to_keep = Resources.random.nextInt(repeat_max - repeat_min + 1) + repeat_min;
+			shape.repeat_max = repeat_max;
+			shape.repeat_min = repeat_min;
 		}
-		if (num_to_keep < candidates.size()) {
+
+		if (final_id.equals("GROUP_ZOMBIE") && num_to_keep == -1) {
+			num_to_keep = 1;
+		}
+
+		if (num_to_keep != -1 && num_to_keep < candidates.size()) {
 			candidate_are_random = true;
 			int num_to_remove = candidates.size() - num_to_keep;
 			for (int remove_idx = 0; remove_idx < num_to_remove
@@ -282,32 +400,35 @@ public class PrefabRendering {
 				int remove_idx2 = Resources.random.nextInt(candidates.size());
 				candidates.remove(remove_idx2);
 			}
+
 		}
 
-		Long chance = (Long) item.get("chance");
-		if (chance != null) {
-			candidate_are_random = true;
+		int chance = Palette.extractChance(item, shape.area());
+
+		if (layer == eLayer.MONSTER) {
+			// In the game, this seems to be impacted by the distance to the closest city.
+			chance = (chance + 1) * 10;
 		}
+
+		shapes.add(shape);
 		for (Vector2i item_position : candidates) {
-			renderItem(id, chance, item_position.x, item_position.y, json_row,
-					candidate_are_random);
+			renderItem(final_id, chance, item_position.x, item_position.y, json_row,
+					candidate_are_random, layer);
 		}
 
 	}
 
-	private void renderItem(String id, Long chance, int x, int y, JSONArray json_row,
-			boolean candidate_are_random) {
-		if (chance != null) {
-			// The rejection probability is "1-chance/100".
-			if ((int) (long) chance < Resources.random.nextInt(100))
-				return;
-		}
-		Cell cell = cells[cellIdx(y, x)];
-		Resources.tiles.appendTiles(cell.tiles, id, json_row, x, y, candidate_are_random,
-				render_filter, palette);
+	private void renderItem(String id, int chance, int x, int y, JSONArray json_row,
+			boolean candidate_are_random, RenderFilter.eLayer layer) throws Exception {
+		if (chance < Resources.random.nextInt(100))
+			return;
+		int cell_idx = cellIdx(y, x);
+		Cell cell = cells[cell_idx];
+		Resources.tiles.appendTilesFromSymbol(cell.tiles, id, json_row, x, y, candidate_are_random,
+				palette, layer);
 	}
 
-	public void render(Graphics2D dst, int x, int y, int w, int h) {
+	public void render(Graphics2D dst, int x, int y, int w, int h) throws Exception {
 		dst.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
 				RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
 		if (Resources.tiles.iso) {
@@ -329,7 +450,7 @@ public class PrefabRendering {
 
 	// Render a iso tileset.
 	// TODO: Make it work.
-	public void renderIso(Graphics2D dst, int x, int y, int w, int h) {
+	public void renderIso(Graphics2D dst, int x, int y, int w, int h) throws Exception {
 		// The labels should be rendered at the end.
 		ArrayList<Label> labels = new ArrayList<>();
 
@@ -352,14 +473,14 @@ public class PrefabRendering {
 							isoCellToScreenX(cell_x + cell_drawing_size_in_px / 2 / 2, cell_y),
 							isoCellToScreenY(cell_x, cell_y + cell_drawing_size_in_px / 2 / 2,
 									cell_drawing_size_in_px),
-							col, row, Color.RED));
+							col, row, eLayer.UNKNOWN));
 				}
 			}
 		}
 
 		// Background around labels.
 		for (Label label : labels) {
-			dst.setColor(label.color);
+			dst.setColor(label.layer.color);
 			int cell_x = label.col * cell_drawing_size_in_px + x;
 			int cell_y = label.row * cell_drawing_size_in_px + y;
 			dst.drawRect(isoCellToScreenX(cell_x, cell_y),
@@ -380,14 +501,14 @@ public class PrefabRendering {
 			dst.setColor(Color.BLACK);
 			dst.setStroke(wideStroke);
 			dst.draw(outline);
-			dst.setColor(label.color);
+			dst.setColor(label.layer.color);
 			dst.drawString(label.value, isoCellToScreenX(label.x_px, label.y_px),
 					isoCellToScreenY(label.x_px, label.y_px, cell_drawing_size_in_px));
 		}
 	}
 
 	// Render the prefab with an orthogonal(i.e. classical) tileset.
-	public void renderOrthogonal(Graphics2D dst, int x, int y, int w, int h) {
+	public void renderOrthogonal(Graphics2D dst, int x, int y, int w, int h) throws Exception {
 		// The labels should be rendered at the end.
 		ArrayList<Label> labels = new ArrayList<>();
 
@@ -397,35 +518,110 @@ public class PrefabRendering {
 				Cell cell = cells[cellIdx(row, col)];
 				int cell_x = col * cell_drawing_size_in_px + x;
 				int cell_y = row * cell_drawing_size_in_px + y;
-				for (RenderTile render_tile : cell.tiles) {
-					Resources.tiles.render(dst, labels, render_tile, cell_x, cell_y,
-							cell_drawing_size_in_px * Resources.tiles.pixelscale,
-							cell_drawing_size_in_px * Resources.tiles.pixelscale, col, row);
-				}
-				if (cell.unknow_cell_character) {
-					// The cell symbol is unknown.
-					labels.add(new Label(Character.toString(cell.character),
-							cell_x + cell_drawing_size_in_px / 2,
-							cell_y + cell_drawing_size_in_px / 2, col, row, Color.RED));
+				if (Resources.tiles.force_character) {
+					dst.setColor(new Color(200, 200, 200));
+					dst.drawString(Character.toString(cell.character),
+							cell_x + cell_drawing_size_in_px / 2
+									- dst.getFontMetrics().charWidth(cell.character) / 2,
+							cell_y - cell_drawing_size_in_px / 2 + 3);
+				} else {
+
+					for (RenderTile render_tile : cell.tiles) {
+						if (!render_filter.isLayerVisible(render_tile.layer)) {
+							continue;
+						}
+						Resources.tiles.render(dst, labels, render_tile, cell_x, cell_y,
+								cell_drawing_size_in_px * Resources.tiles.pixelscale,
+								cell_drawing_size_in_px * Resources.tiles.pixelscale, col, row);
+					}
+					if (cell.unknow_cell_character) {
+						if (!render_filter.isLayerVisible(RenderFilter.eLayer.UNKNOWN)) {
+							continue;
+						}
+						// The cell symbol is unknown.
+						labels.add(new Label(Character.toString(cell.character),
+								cell_x + cell_drawing_size_in_px / 2,
+								cell_y + cell_drawing_size_in_px / 2, col, row, eLayer.UNKNOWN));
+					}
 				}
 			}
 		}
 
-		if (show_grid) {
+		if (show_grid || Resources.tiles.force_character) {
 			renderGridOrtho(dst, x, y, w, h);
 		}
 
 		// Background around labels.
 		for (Label label : labels) {
-			dst.setColor(label.color);
+			dst.setColor(label.layer.color);
 			int cell_x = label.col * cell_drawing_size_in_px + x;
 			int cell_y = label.row * cell_drawing_size_in_px + y;
 			dst.drawRect(cell_x, cell_y, cell_drawing_size_in_px, cell_drawing_size_in_px);
 		}
 
-		// Labels.
 		FontRenderContext font_render_context = new FontRenderContext(null, false, false);
+
+		// Shapes
+		Stroke save = dst.getStroke();
+		Stroke dashed = new BasicStroke(1, BasicStroke.CAP_BUTT, BasicStroke.JOIN_BEVEL, 0,
+				new float[] { 2, 2 }, 0);
+
+		for (AbstractShape shape : shapes) {
+
+			if (!render_filter.isLayerVisible(shape.layer)) {
+				continue;
+			}
+
+			// Get the label position.
+			int label_x = 0, label_y = 0;
+			if (shape instanceof Line) {
+				Line line = (Line) shape;
+				label_x = line.x1 * cell_drawing_size_in_px + cell_drawing_size_in_px / 2;
+				label_y = line.y1 * cell_drawing_size_in_px + cell_drawing_size_in_px / 2;
+			} else if (shape instanceof Rect) {
+				Rect rect = (Rect) shape;
+				label_x = rect.x1 * cell_drawing_size_in_px;
+				label_y = rect.y1 * cell_drawing_size_in_px;
+			}
+			label_y += 13;
+			label_x += 3;
+			// Label background.
+			TextLayout text_layout = new TextLayout(shape.toString(), dst.getFont(),
+					font_render_context);
+			AffineTransform transform = new AffineTransform();
+			transform.translate(label_x, label_y);
+			Shape outline = text_layout.getOutline(transform);
+			BasicStroke wideStroke = new BasicStroke(2);
+			dst.setColor(Color.BLACK);
+			dst.setStroke(wideStroke);
+			dst.draw(outline);
+			// Shape.
+			dst.setStroke(dashed);
+			dst.setColor(shape.layer.color);
+			if (shape instanceof Line) {
+				Line line = (Line) shape;
+				dst.drawLine(line.x1 * cell_drawing_size_in_px + cell_drawing_size_in_px / 2,
+						line.y1 * cell_drawing_size_in_px + cell_drawing_size_in_px / 2,
+						line.x2 * cell_drawing_size_in_px + cell_drawing_size_in_px / 2,
+						line.y2 * cell_drawing_size_in_px + cell_drawing_size_in_px / 2);
+			} else if (shape instanceof Rect) {
+				Rect rect = (Rect) shape;
+				dst.drawRect(rect.x1 * cell_drawing_size_in_px, rect.y1 * cell_drawing_size_in_px,
+						(rect.x2 - rect.x1 + 1) * cell_drawing_size_in_px,
+						(rect.y2 - rect.y1 + 1) * cell_drawing_size_in_px);
+			}
+			dst.setStroke(save);
+			// Label
+			dst.setColor(shape.layer.color);
+			dst.drawString(shape.toString(), label_x, label_y);
+		}
+
+		// Labels.
 		for (Label label : labels) {
+			if (!render_filter.isLayerVisible(label.layer)) {
+				continue;
+			}
+
 			TextLayout text_layout = new TextLayout(label.value, dst.getFont(),
 					font_render_context);
 			AffineTransform transform = new AffineTransform();
@@ -435,7 +631,7 @@ public class PrefabRendering {
 			dst.setColor(Color.BLACK);
 			dst.setStroke(wideStroke);
 			dst.draw(outline);
-			dst.setColor(label.color);
+			dst.setColor(label.layer.color);
 			dst.drawString(label.value, label.x_px, label.y_px);
 		}
 	}
@@ -463,7 +659,8 @@ public class PrefabRendering {
 	}
 
 	// Create a text description of the cell. Used in the info box.
-	public void appendCellDescription(int x, int y, ArrayList<String> description) {
+	public void appendCellDescription(int x, int y, ArrayList<String> description)
+			throws Exception {
 		Cell cell = cells[cellIdx(y, x)];
 		description.add(String.format("Coordinates: %d,%d", x, y));
 		String label = String.format("Symbol: '%c'", cell.character);
@@ -483,7 +680,7 @@ public class PrefabRendering {
 			description.add("Contains random content");
 		}
 		for (RenderTile tile : cell.tiles) {
-			description.add(tile.symbol);
+			description.add(tile.toString());
 		}
 	}
 
@@ -493,7 +690,7 @@ public class PrefabRendering {
 	}
 
 	// Get the cell data from its coordinates.
-	public Cell getCell(Vector2i cell_coordinate) {
+	public Cell getCell(Vector2i cell_coordinate) throws Exception {
 		return cells[cellIdx(cell_coordinate.y, cell_coordinate.x)];
 	}
 

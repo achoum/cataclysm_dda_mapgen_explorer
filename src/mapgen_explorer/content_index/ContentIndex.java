@@ -1,6 +1,7 @@
 
 package mapgen_explorer.content_index;
 
+import mapgen_explorer.resources_loader.Resources;
 import mapgen_explorer.utils.FileUtils;
 import mapgen_explorer.utils.Logger;
 import mapgen_explorer.window.Loading;
@@ -42,6 +43,7 @@ public class ContentIndex {
 
 	public static class JsonFile {
 		public ArrayList<Prefab> prefabs = new ArrayList<>();
+		public ArrayList<Palette> palettes = new ArrayList<>();
 		public File file;
 
 		@Override
@@ -72,6 +74,24 @@ public class ContentIndex {
 
 	}
 
+	public static class Palette {
+		public File file;
+		public int index;
+		public String base_name;
+
+		public Palette(File file, int index, String base_name) {
+			this.file = file;
+			this.index = index;
+			this.base_name = base_name;
+		}
+
+		@Override
+		public String toString() {
+			return "#" + Integer.toString(index) + " : " + base_name;
+		}
+
+	}
+
 	public static class PrefabWithoutFile {
 		public int index;
 		public String base_name;
@@ -88,13 +108,18 @@ public class ContentIndex {
 
 	}
 
+	public interface PrefabCallBack {
+		public void call(JsonFile json);
+	}
+
 	public void update(String main_directory) {
+		Resources.palette_templates.clear();
 		Loading loading = new Loading("Indexing content");
 		Thread progress_bar_thread = new Thread() {
 			@Override
 			public void run() {
 				root = new Directory(new File(main_directory));
-				loading.update(0, 100, "Indexing files");
+				loading.update(0, 100, "List files");
 				indexDirectory(root);
 				Progress progress = new Progress();
 				progress.total = getNumberOfJsonFiles(root);
@@ -104,6 +129,11 @@ public class ContentIndex {
 		};
 		progress_bar_thread.start();
 		loading.setVisible(true);
+		updateGlobalPalette();
+	}
+	
+	void updateGlobalPalette(){
+	
 	}
 
 	void indexDirectory(Directory directory) {
@@ -134,6 +164,23 @@ public class ContentIndex {
 		return count;
 	}
 
+	void recursiveIterateJsonFiles(Directory directory, Loading loading, Progress progress,
+			PrefabCallBack prefabCallBack) {
+		Iterator<JsonFile> json_file_iterator = directory.json_files.iterator();
+		while (json_file_iterator.hasNext()) {
+			JsonFile json_file = json_file_iterator.next();
+			prefabCallBack.call(json_file);
+			loading.update(++progress.current, progress.total,
+					"Scanning " + json_file.file.getPath());
+		}
+
+		Iterator<Directory> sub_directory_iterator = directory.sub_directories.iterator();
+		while (sub_directory_iterator.hasNext()) {
+			Directory sub_directory = sub_directory_iterator.next();
+			recursiveIterateJsonFiles(sub_directory, loading, progress, prefabCallBack);
+		}
+	}
+
 	void recursiveIndexJsonFiles(Directory directory, Loading loading, Progress progress) {
 		Iterator<JsonFile> json_file_iterator = directory.json_files.iterator();
 		while (json_file_iterator.hasNext()) {
@@ -141,7 +188,7 @@ public class ContentIndex {
 			indexJsonFile(json_file);
 			loading.update(++progress.current, progress.total,
 					"Scanning " + json_file.file.getPath());
-			if (json_file.prefabs.isEmpty()) {
+			if (json_file.prefabs.isEmpty() && json_file.palettes.isEmpty()) {
 				// Remove the json file without prefabs.
 				json_file_iterator.remove();
 			}
@@ -201,7 +248,7 @@ public class ContentIndex {
 		return prefabs;
 	}
 
-	static boolean fieldIsStringValue(JSONObject json_object, String field_name,
+	public static boolean fieldIsStringValue(JSONObject json_object, String field_name,
 			String expected_value) {
 		Object type = json_object.getOrDefault(field_name, null);
 		if (!(type instanceof String)) {
@@ -219,16 +266,43 @@ public class ContentIndex {
 			if (!(item instanceof JSONObject))
 				continue;
 			JSONObject item_json = (JSONObject) item;
-			if (!fieldIsStringValue(item_json, "type", "mapgen"))
+
+			String type = (String) item_json.get("type");
+			if (type == null) {
 				continue;
-			if (!fieldIsStringValue(item_json, "method", "json"))
-				continue;
-			Object json_om_terrain = item_json.get("om_terrain");
-			if (json_om_terrain == null)
-				continue;
-			Prefab prefab = new Prefab(json_file.file, item_idx, json_om_terrain.toString());
-			json_file.prefabs.add(prefab);
+			}
+			if (type.equals("mapgen")) {
+
+				if (!fieldIsStringValue(item_json, "type", "mapgen"))
+					continue;
+				if (!fieldIsStringValue(item_json, "method", "json"))
+					continue;
+				Object json_om_terrain = item_json.get("om_terrain");
+				if (json_om_terrain == null)
+					continue;
+				Prefab prefab = new Prefab(json_file.file, item_idx, json_om_terrain.toString());
+				json_file.prefabs.add(prefab);
+			} else if (type.equals("palette")) {
+				String id = (String) item_json.get("id");
+				json_file.palettes.add(new Palette(json_file.file, item_idx, id));
+				Resources.palette_templates.addNewTemplate(id,item_json);
+			}
 		}
+	}
+
+	public void iterateOnPrefabs(PrefabCallBack prefabCallBack) {
+		Loading loading = new Loading("Indexing content");
+		Thread progress_bar_thread = new Thread() {
+			@Override
+			public void run() {
+				Progress progress = new Progress();
+				progress.total = getNumberOfJsonFiles(root);
+				recursiveIterateJsonFiles(root, loading, progress, prefabCallBack);
+				loading.dispose();
+			}
+		};
+		progress_bar_thread.start();
+		loading.setVisible(true);
 	}
 
 }

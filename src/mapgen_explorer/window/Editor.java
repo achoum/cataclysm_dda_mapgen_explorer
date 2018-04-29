@@ -22,7 +22,7 @@ import mapgen_explorer.component.CheckBoxList;
 import mapgen_explorer.component.PrefabRenderPanel;
 import mapgen_explorer.content_index.ContentIndex;
 import mapgen_explorer.render.PrefabRendering;
-import mapgen_explorer.resources_loader.Palette.Cell;
+import mapgen_explorer.resources_loader.Palette.Item;
 import mapgen_explorer.resources_loader.Resources;
 import mapgen_explorer.resources_loader.Tiles;
 import mapgen_explorer.utils.FileUtils;
@@ -87,7 +87,7 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 	Timer to_refresh_timer;
 	private JComboBox selected_terrain;
 	private JComboBox selected_prefab;
-    boolean prefab_selector_is_beeing_updated = false;
+	boolean prefab_selector_is_beeing_updated = false;
 	boolean raw_json_is_being_updated = false;
 	// If true, the user has agreed that the edit tools might modify the json formatting.
 	boolean has_accepted_alert = false;
@@ -347,7 +347,7 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		});
 		panel_1.add(selected_prefab, "cell 0 5 2 1,growx");
 
-        CheckBoxList show_layers = new CheckBoxList();
+		CheckBoxList show_layers = new CheckBoxList();
 		show_layers.setForeground(Color.BLACK);
 		show_layers.setBorder(new LineBorder(Color.GRAY));
 		panel_1.add(show_layers, "cell 0 6 2 1,growx");
@@ -362,6 +362,7 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 					try {
 						prefab_preview.rendering.update();
 					} catch (Exception e1) {
+						prefab_preview.rendering = null;
 						// Okay not do to anything here.
 					}
 					prefab_preview.askUpdateRenderAndRedraw();
@@ -495,22 +496,29 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 				.getSelectedItem();
 		selected_terrain.removeAllItems();
 		CharAndSymbol new_selected_terrain_value = null;
-		for (Entry<Character, Cell> terrain : prefab_preview.palette.char_to_id.entrySet()) {
-			ArrayList<String> symbols = terrain.getValue().entries;
-			String all_symbols;
-			if (symbols.isEmpty()) {
-				all_symbols = "<none>";
-			} else if (symbols.size() == 1) {
-				all_symbols = symbols.get(0);
-			} else {
-				all_symbols = symbols.get(0) + " + ...";
+		for (Entry<Character, ArrayList<Item>> terrain_itemset : prefab_preview.palette.char_to_id
+				.entrySet()) {
+			String all_symbols = "";
+			for (Item terrain : terrain_itemset.getValue()) {
+				if (!all_symbols.isEmpty()) {
+					all_symbols += " ; ";
+				}
+				ArrayList<String> symbols = terrain.entries;
+				if (symbols.isEmpty()) {
+					all_symbols += "<none>";
+				} else if (symbols.size() == 1) {
+					all_symbols += symbols.get(0);
+				} else {
+					all_symbols += symbols.get(0) + " + ...";
+				}
+				all_symbols += "[" + terrain.layer.label + "]";
+				CharAndSymbol new_entry = new CharAndSymbol(terrain_itemset.getKey(), all_symbols);
+				if (save_selected_terrain_value != null
+						&& new_entry.character == save_selected_terrain_value.character) {
+					new_selected_terrain_value = new_entry;
+				}
+				selected_terrain.addItem(new_entry);
 			}
-			CharAndSymbol new_entry = new CharAndSymbol(terrain.getKey(), all_symbols);
-			if (save_selected_terrain_value != null
-					&& new_entry.character == save_selected_terrain_value.character) {
-				new_selected_terrain_value = new_entry;
-			}
-			selected_terrain.addItem(new_entry);
 		}
 		if (new_selected_terrain_value != null) {
 			selected_terrain.setSelectedItem(new_selected_terrain_value);
@@ -590,6 +598,15 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 				}
 			});
 		}
+
+		JMenuItem tileset_menu_item = new JMenuItem("ASCII");
+		mnTileset.add(tileset_menu_item);
+		tileset_menu_item.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				setTileset("ASCII");
+			}
+		});
 	}
 
 	// Change the active tileset.
@@ -729,9 +746,13 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 	public void action(Vector2i cell_coordinate) {
 		switch (tool) {
 		case GET: {
-			PrefabRendering.Cell cell = prefab_preview.rendering.getCell(cell_coordinate);
-			if (cell != null) {
-				selectTerrainByCharacter(cell.character);
+			try {
+				PrefabRendering.Cell cell = prefab_preview.rendering.getCell(cell_coordinate);
+				if (cell != null) {
+					selectTerrainByCharacter(cell.character);
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
 		}
 			break;

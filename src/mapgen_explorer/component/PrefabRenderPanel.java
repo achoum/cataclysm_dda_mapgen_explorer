@@ -176,14 +176,22 @@ public class PrefabRenderPanel extends JPanel
 		}
 		int prefab_rendering_width = rendering.num_cols * cell_drawing_size_in_px;
 		int prefab_rendering_height = rendering.num_rows * cell_drawing_size_in_px;
-		renderPrefabIfNecacary(prefab_rendering_width, prefab_rendering_height);
-		renderOverlay();
+		try {
+			renderPrefabIfNecacary(prefab_rendering_width, prefab_rendering_height);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		try {
+			renderOverlay();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 		g.drawImage(prefab_buffer, render_origin_x, render_origin_y, prefab_rendering_width,
 				prefab_rendering_height, null);
 		g.drawImage(overlay_buffer, 0, 0, getWidth(), getHeight(), null);
 	}
 
-	void renderOverlay() {
+	void renderOverlay() throws Exception {
 		if (overlay_buffer == null || overlay_buffer.getWidth() != getWidth()
 				|| overlay_buffer.getHeight() != getHeight()) {
 			// The size of the rendering target buffer has changed.
@@ -256,7 +264,7 @@ public class PrefabRenderPanel extends JPanel
 		return new Vector2i(cell_x, cell_y);
 	}
 
-	void renderPrefabIfNecacary(int width, int height) {
+	void renderPrefabIfNecacary(int width, int height) throws Exception {
 		if (prefab_buffer == null || prefab_buffer.getWidth() != width
 				|| prefab_buffer.getHeight() != height) {
 			// The size of the target rendering area has changed.
@@ -331,7 +339,8 @@ public class PrefabRenderPanel extends JPanel
 			throw new Exception("Not a prefab");
 		json_prefab = (JSONObject) item;
 		palette = new Palette();
-		palette.load(main_directory, json_prefab);
+		palette.loadFromPrefab(main_directory, json_prefab);
+		palette.loadFromJsonContentArray(content_array);
 		rendering = new PrefabRendering(json_prefab, palette);
 		rendering.update();
 	}

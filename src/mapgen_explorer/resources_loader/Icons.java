@@ -7,4 +7,5 @@ public class Icons {
 	public Icon directory;
 	public Icon jsonfile;
 	public Icon prefab;
+	public Icon palette;
 }

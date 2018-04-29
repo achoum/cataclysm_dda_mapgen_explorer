@@ -4,6 +4,7 @@ package mapgen_explorer.component;
 import mapgen_explorer.content_index.ContentIndex;
 import mapgen_explorer.content_index.ContentIndex.Directory;
 import mapgen_explorer.content_index.ContentIndex.JsonFile;
+import mapgen_explorer.content_index.ContentIndex.Palette;
 import mapgen_explorer.content_index.ContentIndex.Prefab;
 import mapgen_explorer.resources_loader.Resources;
 
@@ -21,7 +22,7 @@ import java.util.Enumeration;
 public class ContentIndexTree extends JTree {
 
 	// Index of the content.
-	ContentIndex content_index = new ContentIndex();
+	public ContentIndex content_index = new ContentIndex();
 
 	// Selects the display icons.
 	DefaultTreeCellRenderer node_render = new DefaultTreeCellRenderer() {
@@ -37,6 +38,8 @@ public class ContentIndexTree extends JTree {
 				setIcon(Resources.icons.jsonfile);
 			} else if (o instanceof ContentIndex.Prefab) {
 				setIcon(Resources.icons.prefab);
+			} else if (o instanceof ContentIndex.Palette) {
+				setIcon(Resources.icons.palette);
 			}
 			return default_render;
 		}
@@ -54,18 +57,18 @@ public class ContentIndexTree extends JTree {
 
 	// Fill the displayed tree with the directories in the indexed content.
 	boolean recursiveBuildTree(ContentIndex.Directory directory, DefaultMutableTreeNode node,
-			String filter) {
-		boolean match_found = matchFilter(filter, directory.file.getName());
+			String filter, boolean force_match) {
+		boolean match_found = force_match || matchFilter(filter, directory.file.getName());
 		for (JsonFile json_file : directory.json_files) {
 			DefaultMutableTreeNode json_file_node = new DefaultMutableTreeNode(json_file);
-			if (recursiveBuildTree(json_file, json_file_node, filter)) {
+			if (recursiveBuildTree(json_file, json_file_node, filter, match_found)) {
 				node.add(json_file_node);
 				match_found = true;
 			}
 		}
 		for (Directory sub_directory : directory.sub_directories) {
 			DefaultMutableTreeNode sub_directory_node = new DefaultMutableTreeNode(sub_directory);
-			if (recursiveBuildTree(sub_directory, sub_directory_node, filter)) {
+			if (recursiveBuildTree(sub_directory, sub_directory_node, filter, match_found)) {
 				match_found = true;
 				node.add(sub_directory_node);
 			}
@@ -75,15 +78,24 @@ public class ContentIndexTree extends JTree {
 
 	// Fill the displayed tree with the json files in the indexed content.
 	boolean recursiveBuildTree(ContentIndex.JsonFile json_file, DefaultMutableTreeNode node,
-			String filter) {
-		boolean match_found = matchFilter(filter, json_file.file.getName());
+			String filter, boolean force_match) {
+		boolean match_found = force_match || matchFilter(filter, json_file.file.getName());
 		for (Prefab prefab : json_file.prefabs) {
-			if (matchFilter(filter, prefab.toString())) {
+			if (match_found || matchFilter(filter, prefab.toString())) {
 				DefaultMutableTreeNode prefab_node = new DefaultMutableTreeNode(prefab);
 				node.add(prefab_node);
 				match_found = true;
 			}
 		}
+
+		for (Palette palette : json_file.palettes) {
+			if (match_found || matchFilter(filter, palette.toString())) {
+				DefaultMutableTreeNode palette_node = new DefaultMutableTreeNode(palette);
+				node.add(palette_node);
+				match_found = true;
+			}
+		}
+
 		return match_found;
 	}
 
@@ -111,7 +123,7 @@ public class ContentIndexTree extends JTree {
 	// Fill the displayed tree with the indexed content.
 	void fillFromIndex(String filter) {
 		DefaultMutableTreeNode root = new DefaultMutableTreeNode(content_index.root);
-		recursiveBuildTree(content_index.root, root, filter);
+		recursiveBuildTree(content_index.root, root, filter, false);
 		DefaultTreeModel model = new DefaultTreeModel(root);
 		setModel(model);
 	}

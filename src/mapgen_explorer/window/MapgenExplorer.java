@@ -1,9 +1,12 @@
 
 package mapgen_explorer.window;
 
+import mapgen_explorer.Config;
 import mapgen_explorer.component.ContentIndexTree;
 import mapgen_explorer.component.PrefabRenderPanel;
 import mapgen_explorer.content_index.ContentIndex;
+import mapgen_explorer.content_index.ContentIndex.JsonFile;
+import mapgen_explorer.resources_loader.JsonValidator;
 import mapgen_explorer.resources_loader.Resources;
 import mapgen_explorer.resources_loader.Tiles;
 import mapgen_explorer.utils.Logger;
@@ -13,6 +16,7 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.event.TreeSelectionEvent;
 import javax.swing.event.TreeSelectionListener;
+
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -20,6 +24,13 @@ import java.util.ArrayList;
 import net.miginfocom.swing.MigLayout;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
+import java.awt.image.BufferedImage;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.nio.file.Paths;
 
 // The main window. Shows the list of available content as well as a render of a selected prefab.
 public class MapgenExplorer extends JFrame implements WindowListener {
@@ -33,8 +44,8 @@ public class MapgenExplorer extends JFrame implements WindowListener {
 
 	public MapgenExplorer(String main_directory) {
 		setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
-		setIconImage(Toolkit.getDefaultToolkit().getImage(MapgenExplorer.class
-				.getResource("/mapgen_explorer/resources/prefab.png")));
+		setIconImage(Toolkit.getDefaultToolkit().getImage(
+				MapgenExplorer.class.getResource("/mapgen_explorer/resources/prefab.png")));
 		this.main_directory = main_directory;
 
 		setTitle("Mapgen Explorer for Cataclysm DDA - " + main_directory);
@@ -53,7 +64,8 @@ public class MapgenExplorer extends JFrame implements WindowListener {
 					prefab_preview.add(toolBar, BorderLayout.NORTH);
 					{
 						JButton btnOpenInEditor = new JButton("Edit");
-						btnOpenInEditor.setIcon(new ImageIcon(MapgenExplorer.class.getResource("/mapgen_explorer/resources/edit.png")));
+						btnOpenInEditor.setIcon(new ImageIcon(MapgenExplorer.class
+								.getResource("/mapgen_explorer/resources/edit.png")));
 						btnOpenInEditor.addActionListener(new ActionListener() {
 							@Override
 							public void actionPerformed(ActionEvent e) {
@@ -64,7 +76,8 @@ public class MapgenExplorer extends JFrame implements WindowListener {
 					}
 					{
 						JButton btnReload = new JButton("Reload");
-						btnReload.setIcon(new ImageIcon(MapgenExplorer.class.getResource("/mapgen_explorer/resources/refresh.png")));
+						btnReload.setIcon(new ImageIcon(MapgenExplorer.class
+								.getResource("/mapgen_explorer/resources/refresh.png")));
 						btnReload.addActionListener(new ActionListener() {
 							@Override
 							public void actionPerformed(ActionEvent e) {
@@ -126,7 +139,8 @@ public class MapgenExplorer extends JFrame implements WindowListener {
 				}
 				{
 					JButton btnNewButton = new JButton("");
-					btnNewButton.setIcon(new ImageIcon(MapgenExplorer.class.getResource("/mapgen_explorer/resources/expand.png")));
+					btnNewButton.setIcon(new ImageIcon(MapgenExplorer.class
+							.getResource("/mapgen_explorer/resources/expand.png")));
 					btnNewButton.addActionListener(new ActionListener() {
 						@Override
 						public void actionPerformed(ActionEvent e) {
@@ -137,7 +151,8 @@ public class MapgenExplorer extends JFrame implements WindowListener {
 				}
 				{
 					JButton button = new JButton("");
-					button.setIcon(new ImageIcon(MapgenExplorer.class.getResource("/mapgen_explorer/resources/collapse.png")));
+					button.setIcon(new ImageIcon(MapgenExplorer.class
+							.getResource("/mapgen_explorer/resources/collapse.png")));
 					button.addActionListener(new ActionListener() {
 						@Override
 						public void actionPerformed(ActionEvent arg0) {
@@ -198,6 +213,20 @@ public class MapgenExplorer extends JFrame implements WindowListener {
 				}
 			}
 			{
+				JMenu mnAnalysis = new JMenu("Analysis");
+				menuBar.add(mnAnalysis);
+				{
+					JMenuItem mntmScanForPotential = new JMenuItem("Scan for Potential Errors");
+					mntmScanForPotential.addActionListener(new ActionListener() {
+						@Override
+						public void actionPerformed(ActionEvent arg0) {
+							scanForPotentialErrors();
+						}
+					});
+					mnAnalysis.add(mntmScanForPotential);
+				}
+			}
+			{
 				JMenu mnHelp = new JMenu("Help");
 				menuBar.add(mnHelp);
 				{
@@ -216,6 +245,54 @@ public class MapgenExplorer extends JFrame implements WindowListener {
 		}
 
 		finalizeLoading();
+	}
+
+	protected void scanForPotentialErrors() {
+		FileOutputStream fos;
+		try {
+			String summary_path = Paths.get(main_directory, "mapgen_explorer_analysis.html")
+					.toString();
+			File fout = new File(summary_path);
+			fos = new FileOutputStream(fout);
+			BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fos));
+			bw.write(
+					"This file was generated by <a href=\"https://github.com/achoum/cataclysm_dda_mapgen_explorer\">MapGen Explorer</a> v"
+							+ Config.version + "."
+							+ " This files contains various potential errors in the json configs."
+							+ " MapGen reimplements its own parsing code. Therefore, some valid features of CDDA might not be implemented and show are erronouse."
+							+ " Visit <a href=\"https://discourse.cataclysmdda.org/t/prefab-explorer/15347/14\">MapGen's forum thread</a> for more details");
+			bw.write("<br/>");
+			bw.write("<br/>");
+
+			BufferedImage tmp_buffer = new BufferedImage(32 * 24, 32 * 24,
+					BufferedImage.TYPE_INT_ARGB);
+
+			prefab_list.content_index.iterateOnPrefabs(new ContentIndex.PrefabCallBack() {
+				@Override
+				public void call(JsonFile json) {
+					try {
+						String relative = new File(main_directory).toURI()
+								.relativize(json.file.toURI()).getPath();
+						String absolute = json.file.getAbsolutePath();
+						String error_strings = JsonValidator.checkError(main_directory, json.file,
+								tmp_buffer);
+						if (error_strings != null && !error_strings.isEmpty()) {
+							bw.write("<a href=\"" + absolute + "\">" + relative + "</a><br/><br/>");
+							bw.write(error_strings);
+							bw.write("<br/>");
+						}
+					} catch (IOException e1) {
+						e1.printStackTrace();
+					}
+				}
+			});
+
+			bw.close();
+			JOptionPane.showMessageDialog(this, "The summary was exported to:\"" + summary_path);
+		} catch (IOException e) {
+			Logger.fatal(e);
+		}
+
 	}
 
 	protected void menuOpenInEditor() {
@@ -251,6 +328,16 @@ public class MapgenExplorer extends JFrame implements WindowListener {
 				}
 			});
 		}
+
+		JMenuItem tileset_menu_item = new JMenuItem("ASCII");
+		mnTilesets.add(tileset_menu_item);
+		tileset_menu_item.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				setTileset("ASCII");
+			}
+		});
+
 	}
 
 	public void reloadSelectedPrefab() {

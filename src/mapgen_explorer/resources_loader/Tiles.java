@@ -2,6 +2,7 @@
 package mapgen_explorer.resources_loader;
 
 import mapgen_explorer.render.PrefabRendering;
+import mapgen_explorer.resources_loader.Palette.Item;
 import mapgen_explorer.utils.FileUtils;
 import mapgen_explorer.utils.RenderFilter;
 import mapgen_explorer.utils.RenderFilter.eLayer;
@@ -28,6 +29,7 @@ public class Tiles {
 	HashMap<String, Tile> tiles = new HashMap<>();
 	public boolean iso = false;
 	public int pixelscale = 1;
+	public boolean force_character = false;
 
 	public static class TileVariant {
 		public TileVariant(int sprite) {
@@ -48,7 +50,8 @@ public class Tiles {
 		}
 	}
 
-	public static RotationAndTileOffset[] neighbor_map_to_rotation;
+	public static RotationAndTileOffset[] neighbor_map_to_rotation_rotate;
+	public static RotationAndTileOffset[] neighbor_map_to_rotation_non_rotate;
 
 	public static class Tile {
 		public BufferedImage image;
@@ -68,6 +71,15 @@ public class Tiles {
 		public Tile tile;
 		public Color label_color = Color.GREEN;
 		public boolean candidate_are_random = false;
+		public eLayer layer;
+
+		private void RenderTile() {
+		}
+
+		@Override
+		public String toString() {
+			return symbol + " [" + layer.label + "]";
+		}
 	}
 
 	String findBaseTileImageFilename(String tile_directory) throws Exception {
@@ -92,6 +104,12 @@ public class Tiles {
 	}
 
 	public void load(String main_directory, String tileset) throws Exception {
+		if (tileset.equals("ASCII")) {
+			Resources.tiles.force_character = true;
+			return;
+		}
+		force_character = false;
+		tiles.clear();
 		String tile_directory = Paths.get(main_directory, "gfx", tileset).toString();
 		String tile_config_path = Paths.get(tile_directory, "tile_config.json").toString();
 		JSONParser parser = new JSONParser();
@@ -168,11 +186,6 @@ public class Tiles {
 			tile.rotates = (Boolean) json_tile.getOrDefault("rotates", Boolean.FALSE);
 			tile.multitile = (Boolean) json_tile.getOrDefault("multitile", Boolean.FALSE);
 
-			if (tile.multitile) {
-				// TODO: Not yet sure of the difference.
-				tile.rotates = true;
-			}
-
 			JSONArray json_additional_tiles = (JSONArray) json_tile.get("additional_tiles");
 			if (json_additional_tiles != null) {
 				loadTiles(json_additional_tiles, image, tile_size_x, tile_size_y,
@@ -235,51 +248,66 @@ public class Tiles {
 		}
 	}
 
-	public void appendTiles(ArrayList<Tiles.RenderTile> dst, Palette.Cell cell, JSONArray json_row,
-			int row, int col, RenderFilter render_filter, Palette palette) {
-		String cell_type = cell.entries.get(Resources.random.nextInt(cell.entries.size()));
-		appendTiles(dst, cell_type, json_row, row, col, false, render_filter, palette);
+	public boolean appendTilesFromPaletteItem(ArrayList<Tiles.RenderTile> dst, Palette.Item cell,
+			JSONArray json_row, int row, int col, Palette palette, RenderFilter.eLayer layer) {
+		String cell_type;
+
+		if (cell.chance != 1 && Resources.random.nextInt(cell.chance) != 0) {
+			return false;
+		}
+		if (!cell.entries.isEmpty()) {
+			cell_type = cell.entries.get(Resources.random.nextInt(cell.entries.size()));
+		} else {
+			cell_type = "unknown";
+		}
+		appendTilesFromSymbol(dst, cell_type, json_row, row, col, false, palette, layer);
+		return true;
 	}
 
-	public void appendTiles(ArrayList<Tiles.RenderTile> dst, String symbol, JSONArray json_row,
-			int row, int col, boolean candidate_are_random, RenderFilter render_filter,
-			Palette palette) {
+	public void appendTilesFromSymbol(ArrayList<Tiles.RenderTile> dst, String symbol,
+			JSONArray json_row, int row, int col, boolean candidate_are_random, Palette palette,
+			RenderFilter.eLayer layer) {
 		Tile tile = tiles.get(symbol);
-		if (tile == null) {
+		if (tile == null || (tile.background.isEmpty() && tile.foreground.isEmpty())) {
 			Tiles.RenderTile rendered_tile = new Tiles.RenderTile();
 			dst.add(rendered_tile);
 			rendered_tile.rotation = -1;
 			rendered_tile.symbol = symbol;
 			rendered_tile.tile = tile;
 			rendered_tile.sprite = -1;
-			rendered_tile.label_color = candidate_are_random ? Color.CYAN : Color.ORANGE;
+			rendered_tile.label_color = layer.color;//candidate_are_random ? Color.CYAN : Color.ORANGE;
 			rendered_tile.candidate_are_random = candidate_are_random;
+			rendered_tile.layer = layer;
 			return;
 		}
 		// Background.
-		if (render_filter.isLayerVisible(eLayer.BACKGROUND) && !tile.background.isEmpty()) {
+		if (!tile.background.isEmpty()) {
 			drawVariant(dst, json_row, row, col, tile, tile.background.get(0), false,
-					symbol + " (bg)", candidate_are_random, palette);
+					symbol + " (bg)", candidate_are_random, palette,
+					RenderFilter.getSubTerrainLayer(layer, false));
 		}
 		// Foreground.
-		if (render_filter.isLayerVisible(eLayer.FOREGROUND) && !tile.foreground.isEmpty()) {
+		if (!tile.foreground.isEmpty()) {
 			drawVariant(dst, json_row, row, col, tile, tile.foreground.get(0), true,
-					symbol + " (fg)", candidate_are_random, palette);
+					symbol + " (fg)", candidate_are_random, palette,
+					RenderFilter.getSubTerrainLayer(layer, true));
 		}
 	}
 
 	private void drawVariant(ArrayList<Tiles.RenderTile> dst, JSONArray json_row, int row, int col,
 			Tile tile, TileVariant tile_variant, boolean is_foreground, String symbol,
-			boolean candidate_are_random, Palette palette) {
-		if (tile.rotates || tile.multitile) {
-			Tiles.RenderTile rendered_tile = new Tiles.RenderTile();
-			dst.add(rendered_tile);
-			rendered_tile.candidate_are_random = candidate_are_random;
-			rendered_tile.symbol = symbol;
+			boolean candidate_are_random, Palette palette, RenderFilter.eLayer layer) {
+		Tiles.RenderTile rendered_tile = new Tiles.RenderTile();
+		dst.add(rendered_tile);
+		rendered_tile.symbol = symbol;
+		rendered_tile.layer = layer;
+		rendered_tile.candidate_are_random = candidate_are_random;
+
+		if (tile.multitile) {
 			// "rotation" i.e. smooth connection to neighbor tiles of the same type.
 			int neighbor_is_similar = getNeighborIsSimilarMask(json_row, row, col, palette);
 			RotationAndTileOffset transformation = neighborIsSimilarToRotatedTileOffset(
-					neighbor_is_similar);
+					neighbor_is_similar, tile.rotates);
 
 			boolean found_multi_tiles = false;
 			TileVariant alternative_variant = null;
@@ -303,8 +331,15 @@ public class Tiles {
 				}
 			}
 
-			if (!found_multi_tiles && !Resources.tiles.iso) {
+			if ((tile.rotates || !found_multi_tiles) && !Resources.tiles.iso) {
 				rendered_tile.rotation = transformation.rotation;
+				if (!found_multi_tiles && !tile.rotates) {
+					if (rendered_tile.rotation == 1) {
+						rendered_tile.rotation = 3;
+					} else if (rendered_tile.rotation == 3) {
+						rendered_tile.rotation = 1;
+					}
+				}
 			}
 
 			if (alternative_tile == null || alternative_variant == null) {
@@ -314,11 +349,7 @@ public class Tiles {
 			rendered_tile.tile = alternative_tile;
 			rendered_tile.sprite = alternative_variant.sprite;
 		} else {
-			Tiles.RenderTile rendered_tile = new Tiles.RenderTile();
-			dst.add(rendered_tile);
-			rendered_tile.candidate_are_random = candidate_are_random;
 			rendered_tile.rotation = -1;
-			rendered_tile.symbol = symbol;
 			rendered_tile.tile = tile;
 			rendered_tile.sprite = tile_variant.sprite;
 		}
@@ -342,8 +373,7 @@ public class Tiles {
 				FontMetrics font_metric = dst.getFontMetrics();
 				labels.add(new PrefabRendering.Label(render_tile.symbol,
 						x + hw - font_metric.stringWidth(render_tile.symbol) / 2,
-						y + hh - font_metric.getHeight() / 2 + 8, col, row,
-						render_tile.label_color));
+						y + hh - font_metric.getHeight() / 2 + 8, col, row, render_tile.layer));
 			}
 			return;
 		}
@@ -374,19 +404,10 @@ public class Tiles {
 	int getNeighborIsSimilarMask(JSONArray json_row, int row, int col, Palette palette) {
 		int neighbor_map = 0;
 		char cur_character = ((String) json_row.get(row)).charAt(col);
-		String cur_symbol;
-
-		Palette.Cell palette_cell = palette.char_to_id.get(cur_character);
-		if (palette_cell != null) {
-			cur_symbol = palette_cell.entries.get(0);
-		} else {
-			cur_symbol = Character.toString(cur_character);
+		ArrayList<Item> palette_cell_set = palette.char_to_id.get(cur_character);
+		if (palette_cell_set == null) {
+			return 0;
 		}
-
-		if (cur_symbol.equals("t_wall")) {
-			int a = 50;
-		}
-
 		for (int dir_idx = 0; dir_idx < Vector2i.DIRS4.length; dir_idx++) {
 			Vector2i dir = Vector2i.DIRS4[dir_idx];
 			int nei_col = col + dir.x;
@@ -399,22 +420,32 @@ public class Tiles {
 				continue;
 			}
 			char nei_character = ((String) json_row.get(nei_row)).charAt(nei_col);
-
-			Palette.Cell nei_palette_cell = palette.char_to_id.get(nei_character);
-			String nei_symbol;
-			if (nei_palette_cell != null) {
-				nei_symbol = nei_palette_cell.entries.get(0);
-			} else {
-				nei_symbol = Character.toString(nei_character);
-			}
-			if (nei_symbol.equals(cur_symbol)) {
+			ArrayList<Item> nei_palette_cell_set = palette.char_to_id.get(nei_character);
+			if (nei_palette_cell_set != null
+					&& hasCommonSymbol(nei_palette_cell_set, palette_cell_set)) {
 				neighbor_map |= 1 << dir_idx;
 			}
 		}
 		return neighbor_map;
 	}
 
-	RotationAndTileOffset[] buildNeighborMapToRotation() {
+	private boolean hasCommonSymbol(ArrayList<Item> a, ArrayList<Item> b) {
+		for (Item a_i : a) {
+			for (String a_s : a_i.entries) {
+				for (Item b_i : b) {
+					for (String b_s : b_i.entries) {
+						if (a_s.startsWith(b_s)) {
+							return true;
+						}
+					}
+				}
+
+			}
+		}
+		return false;
+	}
+
+	RotationAndTileOffset[] buildNeighborMapToRotationRotate() {
 		RotationAndTileOffset[] map = new RotationAndTileOffset[16];
 		map[0b1111] = new RotationAndTileOffset(0, "center");
 
@@ -441,11 +472,49 @@ public class Tiles {
 		return map;
 	}
 
-	RotationAndTileOffset neighborIsSimilarToRotatedTileOffset(int neighbor_is_similar) {
-		if (neighbor_map_to_rotation == null) {
-			neighbor_map_to_rotation = buildNeighborMapToRotation();
+	RotationAndTileOffset[] buildNeighborMapToRotationNonRotate() {
+		RotationAndTileOffset[] map = new RotationAndTileOffset[16];
+		map[0b1111] = new RotationAndTileOffset(0, "center");
+
+		map[0b0011] = new RotationAndTileOffset(0, "corner");
+		map[0b0110] = new RotationAndTileOffset(3, "corner");
+		map[0b1100] = new RotationAndTileOffset(2, "corner");
+		map[0b1001] = new RotationAndTileOffset(1, "corner");
+
+		map[0b0101] = new RotationAndTileOffset(1, "edge");
+		map[0b1010] = new RotationAndTileOffset(0, "edge");
+
+		map[0b0001] = new RotationAndTileOffset(3, "end_piece");
+		map[0b0010] = new RotationAndTileOffset(0, "end_piece");
+		map[0b0100] = new RotationAndTileOffset(1, "end_piece");
+		map[0b1000] = new RotationAndTileOffset(2, "end_piece");
+
+		map[0b0111] = new RotationAndTileOffset(0, "t_connection");
+		map[0b1110] = new RotationAndTileOffset(1, "t_connection");
+		map[0b1101] = new RotationAndTileOffset(2, "t_connection");
+		map[0b1011] = new RotationAndTileOffset(3, "t_connection");
+
+		map[0b0000] = new RotationAndTileOffset(0, "unconnected");
+
+		return map;
+	}
+
+	RotationAndTileOffset neighborIsSimilarToRotatedTileOffset(int neighbor_is_similar,
+			boolean rotate) {
+		neighbor_map_to_rotation_rotate = null;
+		neighbor_map_to_rotation_non_rotate = null;
+		if (neighbor_map_to_rotation_rotate == null) {
+			neighbor_map_to_rotation_rotate = buildNeighborMapToRotationRotate();
 		}
-		return neighbor_map_to_rotation[neighbor_is_similar];
+
+		if (neighbor_map_to_rotation_non_rotate == null) {
+			neighbor_map_to_rotation_non_rotate = buildNeighborMapToRotationNonRotate();
+		}
+		if (rotate) {
+			return neighbor_map_to_rotation_rotate[neighbor_is_similar];
+		} else {
+			return neighbor_map_to_rotation_non_rotate[neighbor_is_similar];
+		}
 	}
 
 }

@@ -34,10 +34,24 @@ public class PaletteTemplates {
 				}
 				String id = (String) item_json.get("id");
 				Palette palette = new Palette();
-				palette.loadPalette(item_json);
+				palette.loadFromContentObject(item_json);
 				palettes.put(id, palette);
 			}
 			reader.close();
+		}
+	}
+
+	public void clear() {
+		palettes.clear();
+	}
+
+	public void addNewTemplate(String id, JSONObject item_json) {
+		try {
+			Palette palette = new Palette();
+			palette.loadFromContentObject(item_json);
+			palettes.put(id, palette);
+		} catch (Exception e) {
+			e.printStackTrace();
 		}
 	}
 

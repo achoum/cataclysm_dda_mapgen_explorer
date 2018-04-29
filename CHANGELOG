@@ -1,3 +1,18 @@
+Version 0.3 (29 April 2018)
+	New features
+	- New "Scan for Potential Error" that scans the entire repository for errors (e.g. undefined symbol, out-of-bound coordinates, unexpected entries [misspelled] , etc.)
+	- Remembers the CDDA main directory.
+	- The explorer tree shows palettes.
+	- Emulate for ASCII terminal palette (black and white).
+	
+	Modifications
+	- Improvement of the display following a better understanding of the format.
+	- The filter now display all the children of the matched items.
+	- Don't exit on error messages.
+	
+	Bug Fixes
+	- Don't merge tilesets when switching between tilesets with missing tiles.
+	
 Version 0.2 (28 April 2018)
 	New features
 	- Filter on elements' names.
@@ -13,12 +28,12 @@ Version 0.2 (28 April 2018)
 		- Show grid.
 		- Hide/show of individual layers (terrain, monsters, items, etc.).
 	
-	Modification
+	Modifications
 	- Rename of the project to "Mapgen Explorer"
 	- Labels are more visible (better colors + contour).
 	- '.' and ' ' are not considered "unknown characters" when non-matched to a palette.
 	
-	Big Fixes
+	Bug Fixes
 	- The zooms is adapted automatically when switch between prefabs of different sizes.
 	- Labels going "behind" tiles.
 	- Corner non rotated tiles.

@@ -5,7 +5,6 @@ import mapgen_explorer.Config;
 
 import javax.swing.*;
 import java.net.URL;
-import java.nio.file.Paths;
 import java.util.Random;
 
 // List of static resources and assets. 
@@ -29,13 +28,16 @@ public class Resources {
 		icons.directory = getIcon("directory.png");
 		icons.jsonfile = getIcon("json-file.png");
 		icons.prefab = getIcon("prefab.png");
+		icons.palette = getIcon("palette.png");
 
 		tiles = new Tiles();
 		tiles.load(main_directory, Config.default_tileset);
 
 		palette_templates = new PaletteTemplates();
+		/*
 		palette_templates
 				.load(Paths.get(main_directory, "data", "json", "mapgen_palettes").toString());
+		*/
 	}
 
 }

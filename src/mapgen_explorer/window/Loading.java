@@ -36,6 +36,9 @@ public class Loading extends JDialog {
 		setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
 		setAlwaysOnTop(true);
 		setBounds(100, 100, 488, 81);
+		setIconImage(Toolkit.getDefaultToolkit()
+				.getImage(Editor.class.getResource("/mapgen_explorer/resources/prefab.png")));
+
 		{
 			progress_ui = new JProgressBar();
 			progress_ui.setStringPainted(true);

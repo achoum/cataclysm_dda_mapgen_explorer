@@ -143,11 +143,22 @@ public class PrefabRendering {
 								row_idx, col_idx, false, palette, RenderFilter.eLayer.TERRAIN);
 					}
 
+					boolean terrain_filled = false;
+
 					for (Item palette_item : palette_item_set) {
 						if (palette_item != null) {
+
+							if (palette_item.layer == eLayer.TERRAIN && terrain_filled) {
+								continue;
+							}
+
 							boolean success = Resources.tiles.appendTilesFromPaletteItem(cell.tiles,
 									palette_item, json_row, row_idx, col_idx, palette,
 									palette_item.layer);
+
+							if (palette_item.layer == eLayer.TERRAIN) {
+								terrain_filled = true;
+							}
 
 							if (!success && palette_item.layer == eLayer.TERRAIN) {
 								Resources.tiles.appendTilesFromSymbol(cell.tiles, fill_ter,
@@ -373,7 +384,7 @@ public class PrefabRendering {
 		Object repeat_object = item.get("repeat");
 		if (repeat_object instanceof Long) {
 			num_to_keep = (int) (long) repeat_object;
-			shape.repeat_max = shape.repeat_min = num_to_keep;
+			shape.label += " [repeat: " + num_to_keep + "]";
 		} else if (repeat_object instanceof JSONArray) {
 			JSONArray repeat = (JSONArray) repeat_object;
 			int repeat_min = (int) (long) repeat.get(0);
@@ -384,8 +395,7 @@ public class PrefabRendering {
 				repeat_min = swap;
 			}
 			num_to_keep = Resources.random.nextInt(repeat_max - repeat_min + 1) + repeat_min;
-			shape.repeat_max = repeat_max;
-			shape.repeat_min = repeat_min;
+			shape.label += " [repeat: " + repeat_min + ";" + repeat_max + "]";
 		}
 
 		if (final_id.equals("GROUP_ZOMBIE") && num_to_keep == -1) {
@@ -403,7 +413,7 @@ public class PrefabRendering {
 
 		}
 
-		int chance = Palette.extractChance(item, shape.area());
+		int chance = Palette.extractChance(item, shape);
 
 		if (layer == eLayer.MONSTER) {
 			// In the game, this seems to be impacted by the distance to the closest city.
@@ -662,13 +672,16 @@ public class PrefabRendering {
 	public void appendCellDescription(int x, int y, ArrayList<String> description)
 			throws Exception {
 		Cell cell = cells[cellIdx(y, x)];
-		description.add(String.format("Coordinates: %d,%d", x, y));
+		// Coordinates.
+		description.add(String.format("x:%d y:%d", x, y));
+		// Symbol.
 		String label = String.format("Symbol: '%c'", cell.character);
 		if (cell.unknow_cell_character) {
 			// The cell symbol is unknown.
 			label += " [unknown symbol]";
 		}
 		description.add(label);
+		// Check for random tiles.
 		boolean candidate_are_random = false;
 		for (RenderTile tile : cell.tiles) {
 			if (tile.candidate_are_random) {
@@ -679,9 +692,35 @@ public class PrefabRendering {
 		if (candidate_are_random) {
 			description.add("Contains random content");
 		}
-		for (RenderTile tile : cell.tiles) {
-			description.add(tile.toString());
+
+		// Tiles.
+		if (!cell.tiles.isEmpty()) {
+			description.add("");
+			description.add("Tile");
+			for (RenderTile tile : cell.tiles) {
+				description.add(tile.toString());
+			}
 		}
+
+		// Shapes.
+		boolean has_shape = false;
+		for (AbstractShape shape : shapes) {
+			if (shape.contains(x, y)) {
+				has_shape = true;
+				break;
+			}
+		}
+		if (has_shape) {
+			description.add("");
+			description.add("Place");
+			for (AbstractShape shape : shapes) {
+				if (!shape.contains(x, y)) {
+					continue;
+				}
+				description.add(shape.label + " [layer:" + shape.layer.label + "]");
+			}
+		}
+
 	}
 
 	// Switch on/off the display of the grid.

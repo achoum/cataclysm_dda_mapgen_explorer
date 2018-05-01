@@ -22,9 +22,9 @@ public class RenderFilter {
 		MONSTER("monster", Color.RED, "monster", new String[] { "monster", "monsters" }),
 		VEHICULE("vehicle", Color.CYAN, "vehicle", "vehicles"),
 
-		SIGN("sign", Color.ORANGE, "item_group"),
-		LIQUID("liquid", Color.ORANGE, "liquid"),
-		GASPUMP("gaspump", Color.ORANGE, "group"),
+		SIGN("sign", Color.ORANGE, "NONE", "signs"),
+		LIQUID("liquid", Color.ORANGE, "liquid", "liquids"),
+		GASPUMP("gaspump", Color.ORANGE, "group", "gaspumps"),
 		LOOT("loot", Color.ORANGE, "item", "loots")
 
 		;
@@ -41,8 +41,8 @@ public class RenderFilter {
 		eLayer(String label, Color color, String key_id, String source) {
 			this.label = label;
 			this.color = color;
-			this.sources = new String[] { source };
 			this.key_id = key_id;
+			this.sources = new String[] { source };
 		}
 
 		eLayer(String label, Color color, String key_id) {
@@ -54,8 +54,8 @@ public class RenderFilter {
 		eLayer(String label, Color color, String key_id, String[] sources) {
 			this.label = label;
 			this.color = color;
-			this.sources = sources;
 			this.key_id = key_id;
+			this.sources = sources;
 		}
 
 	}

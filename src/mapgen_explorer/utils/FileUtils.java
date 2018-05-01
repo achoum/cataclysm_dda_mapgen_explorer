@@ -1,6 +1,7 @@
 
 package mapgen_explorer.utils;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
@@ -22,6 +23,11 @@ public class FileUtils {
 	// Import a string from a file.
 	public static String readFile(String path, Charset encoding) throws IOException {
 		byte[] encoded = Files.readAllBytes(Paths.get(path));
+		return new String(encoded, encoding);
+	}
+
+	public static String readFile(File file, Charset encoding) throws IOException {
+		byte[] encoded = Files.readAllBytes(file.toPath());
 		return new String(encoded, encoding);
 	}
 

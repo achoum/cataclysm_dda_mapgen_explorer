@@ -4,6 +4,7 @@ package mapgen_explorer.resources_loader;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
+import mapgen_explorer.render.shape.AbstractShape;
 import mapgen_explorer.utils.Logger;
 import mapgen_explorer.utils.RenderFilter;
 import mapgen_explorer.utils.RenderFilter.eLayer;
@@ -93,9 +94,11 @@ public class Palette {
 		return RenderFilter.eLayer.ITEMS;
 	}
 
-	public static int extractChance(JSONObject item, int total_area) {
+	public static int extractChance(JSONObject item, AbstractShape shape) {
 		Long chance = (Long) item.get("chance");
 		if (chance != null) {
+			if (shape != null)
+				shape.label += " [chance: " + chance + "]";
 			return (int) (long) chance;
 		}
 		if (item.containsKey("density")) {
@@ -106,11 +109,15 @@ public class Palette {
 			} else if (uncasted_density instanceof Double) {
 				density = (float) (double) item.get("density");
 			}
+			if (shape != null)
+				shape.label += " [density: " + density + "]";
 			return (int) (1 / density);
 		}
 		if (item.containsKey("freq")) {
 			int freq = (int) (long) item.get("freq");
-			return (int) (total_area / freq);
+			if (shape != null)
+				shape.label += " [freq: " + freq + "]";
+			return shape.area() / freq;
 		}
 		return 1;
 	}
@@ -145,7 +152,7 @@ public class Palette {
 					if (real_symbol == null) {
 						throw new Exception("Cannot parse " + layer_symbol);
 					}
-					item.chance = extractChance((JSONObject) symbol, -1);
+					item.chance = extractChance((JSONObject) symbol, null);
 					item_set.add(item);
 				} else if (symbol instanceof JSONArray) {
 					JSONArray array = (JSONArray) symbol;
@@ -158,7 +165,7 @@ public class Palette {
 							throw new Exception("Cannot parse " + layer_symbol);
 						}
 						item.entries.add(real_symbol);
-						item.chance = extractChance(sub_item, -1);
+						item.chance = extractChance(sub_item, null);
 						item_set.add(item);
 					}
 
@@ -196,12 +203,13 @@ public class Palette {
 						JSONObject sub_item_object_casted = (JSONObject) sub_item_object;
 						String sub_item = (String) sub_item_object_casted.get(layer.key_id);
 						if (sub_item == null) {
-							throw new Exception("Invalid key defined for layer " + layer);
+							item.entries.add(last_hope_symbol);
+						} else {
+							item.entries.add(sub_item);
 						}
 						if (sub_item_object_casted.containsKey("chance") && sub_item_idx == 0) {
 							item.chance = (int) (long) sub_item_object_casted.get("chance");
 						}
-						item.entries.add(sub_item);
 					} else {
 						throw new Exception("Unsupported type:" + sub_item_object);
 					}

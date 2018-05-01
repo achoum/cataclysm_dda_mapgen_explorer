@@ -13,4 +13,9 @@ public class Rect extends AbstractShape {
 	public int area() {
 		return (x2 - x1) * (y2 - y1);
 	}
+
+	@Override
+	public boolean contains(int x, int y) {
+		return x >= x1 && x <= x2 && y >= y1 && y <= y2;
+	}
 }

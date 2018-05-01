@@ -10,6 +10,8 @@ import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.undo.UndoManager;
+
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rsyntaxtextarea.Theme;
@@ -31,6 +33,8 @@ import mapgen_explorer.utils.RenderFilter;
 import mapgen_explorer.utils.Vector2i;
 
 import java.awt.Toolkit;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.StringSelection;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -45,6 +49,7 @@ import javax.swing.JSeparator;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JSplitPane;
 import javax.swing.JToggleButton;
+import javax.swing.KeyStroke;
 import javax.swing.JComboBox;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
@@ -73,11 +78,13 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 	String main_directory;
 	PrefabRenderPanel prefab_preview;
 	RSyntaxTextArea raw_json_editbox;
+	UndoManager undoManager;
 	ContentIndex.Prefab prefab_index;
 	// Current selected tool.
 	eTool tool = eTool.SET;
 	JToggleButton tool_enable_set;
 	JToggleButton tool_enable_get;
+	JToggleButton tool_enable_coordinates;
 	boolean interface_loaded = false;
 	JTextArea console_editbox;
 	JMenu mnTileset;
@@ -85,16 +92,20 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 	boolean about_to_be_updated = false;
 	// Timer used to trigger the refresh of the prefab rendering after the raw json editbox is modified.
 	Timer to_refresh_timer;
+	Timer check_reload;
 	private JComboBox selected_terrain;
 	private JComboBox selected_prefab;
 	boolean prefab_selector_is_beeing_updated = false;
 	boolean raw_json_is_being_updated = false;
 	// If true, the user has agreed that the edit tools might modify the json formatting.
 	boolean has_accepted_alert = false;
+	long last_file_modified = -1;
+	private JCheckBoxMenuItem chckbxmntmAutoreloadWhenFile;
 
 	enum eTool {
 		SET, // Apply a character on the map.
-		GET // Get a character from the map. 
+		GET, // Get a character from the map.
+		COORDINATES // Copy the coordinates in the clipboard.
 	}
 
 	static class CharAndSymbol {
@@ -148,15 +159,46 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		menuBar.add(mnFile);
 
 		JMenuItem menu_save = new JMenuItem("Save");
+		menu_save.setAccelerator(
+				KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_S, java.awt.Event.CTRL_MASK));
 		menu_save.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				actionMenuSave();
 			}
 		});
+
+		JMenuItem mntmReload = new JMenuItem("Reload");
+		mntmReload.setAccelerator(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_F5, 0));
+		mntmReload.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				actionMenuReload();
+			}
+		});
+		mnFile.add(mntmReload);
+
+		chckbxmntmAutoreloadWhenFile = new JCheckBoxMenuItem("Auto-Reload When File Changes");
+		chckbxmntmAutoreloadWhenFile.setAccelerator(
+				KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_F5, java.awt.Event.CTRL_MASK));
+		chckbxmntmAutoreloadWhenFile.addItemListener(new ItemListener() {
+			@Override
+			public void itemStateChanged(ItemEvent arg0) {
+				System.out.println("Auto-reload: " + chckbxmntmAutoreloadWhenFile.isSelected());
+				if (chckbxmntmAutoreloadWhenFile.isSelected()) {
+					autoReloadEnabled();
+				}
+			}
+		});
+		mnFile.add(chckbxmntmAutoreloadWhenFile);
+
+		JSeparator separator_3 = new JSeparator();
+		mnFile.add(separator_3);
 		mnFile.add(menu_save);
 
 		JMenuItem menu_save_as = new JMenuItem("Save As...");
+		menu_save_as.setAccelerator(KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_S,
+				java.awt.Event.CTRL_MASK | java.awt.Event.ALT_MASK));
 		menu_save_as.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
@@ -178,6 +220,8 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		mnFile.add(separator);
 
 		JMenuItem menu_exit = new JMenuItem("Exit");
+		menu_exit.setAccelerator(
+				KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_W, java.awt.Event.CTRL_MASK));
 		menu_exit.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
@@ -190,7 +234,6 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		menuBar.add(edit_undo);
 
 		JMenuItem mntmUndo = new JMenuItem("Undo");
-		mntmUndo.setEnabled(false);
 		mntmUndo.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
@@ -199,15 +242,14 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		});
 		edit_undo.add(mntmUndo);
 
-		JMenuItem edit_find = new JMenuItem("Find");
-		edit_find.setEnabled(false);
-		edit_find.addActionListener(new ActionListener() {
+		JMenuItem mntmRedo = new JMenuItem("Redo");
+		mntmRedo.addActionListener(new ActionListener() {
 			@Override
-			public void actionPerformed(ActionEvent e) {
-				actionMenuFind();
+			public void actionPerformed(ActionEvent arg0) {
+				actionMenuRedo();
 			}
 		});
-		edit_undo.add(edit_find);
+		edit_undo.add(mntmRedo);
 
 		JMenu mnView = new JMenu("View");
 		menuBar.add(mnView);
@@ -238,6 +280,8 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		mnView.add(mnTileset);
 
 		menu_checkbox_show_grid = new JCheckBoxMenuItem("Show grid");
+		menu_checkbox_show_grid.setAccelerator(
+				KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_G, java.awt.Event.CTRL_MASK));
 		menu_checkbox_show_grid.addItemListener(new ItemListener() {
 			@Override
 			public void itemStateChanged(ItemEvent arg0) {
@@ -286,6 +330,7 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		setContentPane(contentPane);
 
 		JSplitPane splitPane = new JSplitPane();
+		splitPane.setOneTouchExpandable(true);
 		splitPane.setResizeWeight(0.3);
 		contentPane.add(splitPane, BorderLayout.CENTER);
 
@@ -293,18 +338,28 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		splitPane.setRightComponent(panel);
 		panel.setLayout(new BorderLayout(0, 0));
 
+		JSplitPane splitPane_1 = new JSplitPane();
+		splitPane_1.setResizeWeight(0.8);
+		splitPane_1.setOrientation(JSplitPane.VERTICAL_SPLIT);
+		panel.add(splitPane_1, BorderLayout.CENTER);
+
+		JPanel panel_2 = new JPanel();
+		splitPane_1.setLeftComponent(panel_2);
+		panel_2.setLayout(new BorderLayout(0, 0));
+
 		prefab_preview = new PrefabRenderPanel();
+		panel_2.add(prefab_preview, BorderLayout.CENTER);
 		prefab_preview.setActionCallBack(this);
-		panel.add(prefab_preview, BorderLayout.CENTER);
 
 		JPanel panel_1 = new JPanel();
-		panel.add(panel_1, BorderLayout.EAST);
+		panel_2.add(panel_1, BorderLayout.EAST);
 		panel_1.setLayout(new MigLayout("", "[][]", "[][][][][][][]"));
 
 		JLabel lblNewLabel = new JLabel("Tools");
 		panel_1.add(lblNewLabel, "flowy,cell 0 0");
 
 		tool_enable_set = new JToggleButton("");
+		tool_enable_set.setToolTipText("Change the terrain type.");
 		tool_enable_set.setIcon(
 				new ImageIcon(Editor.class.getResource("/mapgen_explorer/resources/edit.png")));
 		panel_1.add(tool_enable_set, "cell 0 1");
@@ -317,9 +372,28 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		tool_enable_set.setSelected(true);
 
 		tool_enable_get = new JToggleButton("");
+		tool_enable_get.setToolTipText("Sample the terrain type.");
 		tool_enable_get.setIcon(
 				new ImageIcon(Editor.class.getResource("/mapgen_explorer/resources/pipette.png")));
-		panel_1.add(tool_enable_get, "cell 1 1");
+		tool_enable_get.addItemListener(new ItemListener() {
+			@Override
+			public void itemStateChanged(ItemEvent e) {
+				setTool(eTool.GET, false);
+			}
+		});
+		panel_1.add(tool_enable_get, "flowx,cell 1 1");
+
+		tool_enable_coordinates = new JToggleButton("");
+		tool_enable_coordinates.setToolTipText("Copy the cell coordinates in the clipboard.");
+		tool_enable_coordinates.addItemListener(new ItemListener() {
+			@Override
+			public void itemStateChanged(ItemEvent arg0) {
+				setTool(eTool.COORDINATES, false);
+			}
+		});
+		tool_enable_coordinates.setIcon(new ImageIcon(
+				Editor.class.getResource("/mapgen_explorer/resources/coordinates.png")));
+		panel_1.add(tool_enable_coordinates, "cell 1 1");
 
 		selected_terrain = new JComboBox();
 		panel_1.add(selected_terrain, "cell 0 2 2 1,growx");
@@ -351,6 +425,16 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		show_layers.setForeground(Color.BLACK);
 		show_layers.setBorder(new LineBorder(Color.GRAY));
 		panel_1.add(show_layers, "cell 0 6 2 1,growx");
+
+		JScrollPane console_scroll = new JScrollPane();
+		splitPane_1.setRightComponent(console_scroll);
+
+		console_editbox = new JTextArea();
+		console_editbox.setEditable(false);
+		console_editbox.setForeground(new Color(255, 255, 255));
+		console_editbox.setBackground(Color.decode("#293134"));
+		console_scroll.setViewportView(console_editbox);
+
 		for (RenderFilter.eLayer layer : RenderFilter.eLayer.values()) {
 			JCheckBox layer_checkbox = new JCheckBox(layer.label);
 			layer_checkbox.setSelected(true);
@@ -370,41 +454,42 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 			});
 			show_layers.addCheckbox(layer_checkbox);
 		}
-		tool_enable_get.addItemListener(new ItemListener() {
-			@Override
-			public void itemStateChanged(ItemEvent e) {
-				setTool(eTool.GET, false);
-			}
-		});
 
 		JPanel editor_console_panel = new JPanel();
 		splitPane.setLeftComponent(editor_console_panel);
 		editor_console_panel.setLayout(new BorderLayout(0, 0));
+		undoManager = new UndoManager();
 
-		JSplitPane editor_console_split = new JSplitPane();
-		editor_console_split.setResizeWeight(0.8);
-		editor_console_split.setOrientation(JSplitPane.VERTICAL_SPLIT);
-		editor_console_panel.add(editor_console_split, BorderLayout.CENTER);
+		to_refresh_timer = new Timer(500, new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				refreshDisplayFromEditbox();
+			}
+		});
+		to_refresh_timer.setRepeats(false);
 
-		JScrollPane console_scroll = new JScrollPane();
-		editor_console_split.setRightComponent(console_scroll);
-
-		console_editbox = new JTextArea();
-		console_editbox.setEditable(false);
-		console_editbox.setForeground(new Color(255, 255, 255));
-		console_editbox.setBackground(Color.decode("#293134"));
-		console_scroll.setViewportView(console_editbox);
+		check_reload = new Timer(1000, new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				if (chckbxmntmAutoreloadWhenFile.isSelected()) {
+					checkReload();
+				}
+			}
+		});
+		check_reload.setRepeats(true);
+		check_reload.start();
 
 		JPanel raw_json_edit_subpanel = new JPanel();
-		editor_console_split.setLeftComponent(raw_json_edit_subpanel);
+		editor_console_panel.add(raw_json_edit_subpanel, BorderLayout.NORTH);
 		raw_json_edit_subpanel.setLayout(new BorderLayout(0, 0));
 
 		RTextScrollPane raw_json_editscroll = new RTextScrollPane();
-		raw_json_edit_subpanel.add(raw_json_editscroll);
+		editor_console_panel.add(raw_json_editscroll, BorderLayout.CENTER);
 		raw_json_editscroll.setLineNumbersEnabled(true);
 		raw_json_editscroll.setFoldIndicatorEnabled(true);
 
 		raw_json_editbox = new RSyntaxTextArea();
+		raw_json_editbox.getDocument().addUndoableEditListener(undoManager);
 		raw_json_editbox.getDocument().addDocumentListener(new DocumentListener() {
 
 			@Override
@@ -423,14 +508,6 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 			}
 		});
 
-		to_refresh_timer = new Timer(500, new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				refreshDisplayFromEditbox();
-			}
-		});
-		to_refresh_timer.setRepeats(false);
-
 		raw_json_editscroll.setViewportView(raw_json_editbox);
 		raw_json_editbox.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JSON_WITH_COMMENTS);
 		raw_json_editbox.setCodeFoldingEnabled(true);
@@ -442,13 +519,68 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		addWindowListener(this);
 	}
 
+	void actionMenuReload() {
+		if (has_pending_edits) {
+			int dialogResult = JOptionPane.showConfirmDialog(this,
+					"The editor contains some modifications.\nIf you reload the editor content from the file,\n there modifications will be lost. Do you want to reload?",
+					"Confirm reload", JOptionPane.YES_NO_OPTION);
+			if (dialogResult == JOptionPane.YES_OPTION) {
+			} else {
+				return;
+			}
+		}
+
+		try {
+			open(prefab_index);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+	}
+
+	protected void autoReloadEnabled() {
+		System.out.println("Auto reload enabled");
+		if (has_pending_edits) {
+			chckbxmntmAutoreloadWhenFile.setSelected(false);
+			JOptionPane.showConfirmDialog(this,
+					"The editor contains some modifications.\n Save or reload the file before enabeling auto-reload.",
+					"Confirm enable auto-reload", JOptionPane.PLAIN_MESSAGE);
+		}
+	}
+
+	protected void checkReload() {
+		System.out.println("Check change");
+
+		if (has_pending_edits) {
+			chckbxmntmAutoreloadWhenFile.setSelected(false);
+			JOptionPane.showConfirmDialog(this,
+					"The text in the editor was modified while auto-reload was enabled.\n In consequence, autoreload was disabled.",
+					"Confirm reload", JOptionPane.PLAIN_MESSAGE);
+			return;
+		}
+
+		long cur_last_modified = prefab_index.file.lastModified();
+		if (cur_last_modified != last_file_modified) {
+			System.out.println("Reloading");
+			try {
+				open(prefab_index);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	protected void actionMenuRedo() {
+		undoManager.redo();
+	}
+
 	// Update the title of the window.
 	void updateTitle() {
 		if (prefab_index == null) {
 			return;
 		}
-		setTitle("Prefab Editor - " + (has_pending_edits ? "*" : "")
-				+ prefab_index.file.getAbsolutePath());
+		setTitle("Mapgen Explorer " + Config.localVersion() + " for Cataclysm DDA - "
+				+ (has_pending_edits ? "*" : "") + prefab_index.file.getAbsolutePath());
 	}
 
 	// Change the theme of the raw json editor.
@@ -465,11 +597,13 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 	// Open a prefab.
 	protected void open(ContentIndex.Prefab prefab_index) throws Exception {
 		this.prefab_index = prefab_index;
+		last_file_modified = prefab_index.file.lastModified();
 		// Load the json in the edit text box.
 		String raw_prefab = FileUtils.readFile(prefab_index.file.getAbsolutePath(),
 				StandardCharsets.UTF_8);
 		raw_json_editbox.setText(raw_prefab);
 		raw_json_editbox.setCaretPosition(0);
+		undoManager.discardAllEdits();
 		has_pending_edits = false;
 		refreshDisplayFromEditbox();
 		prefab_preview.rendering.setShowGrid(menu_checkbox_show_grid.isSelected());
@@ -479,14 +613,21 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 
 	// Update the prefab render from the content of the editbox.
 	public void refreshDisplayFromEditbox() {
+		String output = "";
 		try {
+			Logger.enableSaveErrors();
 			prefab_preview.loadPrefab(main_directory, prefab_index, raw_json_editbox.getText());
-			console_editbox.setText("Json parsing successful");
+			output += "Json parsing successful\n";
 			refreshSelectedTerrain();
 			refreshSelectedPrefab();
 		} catch (Exception e) {
-			console_editbox.setText("Json parsing failed:\n" + e.toString());
+			output += "Json parsing failed:\n" + e.toString() + "\n";
 		}
+		String warnings = Logger.getClearAndDisableSavedErrors();
+		if (!warnings.isEmpty()) {
+			output = "Warnings\n" + warnings + output;
+		}
+		console_editbox.setText(output);
 	}
 
 	// Refresh the list of available terrains from the content of the palette of the prefab.
@@ -498,27 +639,30 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		CharAndSymbol new_selected_terrain_value = null;
 		for (Entry<Character, ArrayList<Item>> terrain_itemset : prefab_preview.palette.char_to_id
 				.entrySet()) {
-			String all_symbols = "";
+
+			String first_symbol = null;
+			int num_symbols = 0;
 			for (Item terrain : terrain_itemset.getValue()) {
-				if (!all_symbols.isEmpty()) {
-					all_symbols += " ; ";
-				}
 				ArrayList<String> symbols = terrain.entries;
-				if (symbols.isEmpty()) {
-					all_symbols += "<none>";
-				} else if (symbols.size() == 1) {
-					all_symbols += symbols.get(0);
-				} else {
-					all_symbols += symbols.get(0) + " + ...";
+				for (String symbol : symbols) {
+					if (first_symbol == null) {
+						first_symbol = symbol + " [" + terrain.layer.label + "]";
+					}
+					num_symbols++;
 				}
-				all_symbols += "[" + terrain.layer.label + "]";
-				CharAndSymbol new_entry = new CharAndSymbol(terrain_itemset.getKey(), all_symbols);
-				if (save_selected_terrain_value != null
-						&& new_entry.character == save_selected_terrain_value.character) {
-					new_selected_terrain_value = new_entry;
-				}
-				selected_terrain.addItem(new_entry);
 			}
+			if (first_symbol == null) {
+				first_symbol = "Unknown";
+			} else if (num_symbols > 1) {
+				first_symbol += " (+" + num_symbols + ")";
+			}
+			CharAndSymbol new_entry = new CharAndSymbol(terrain_itemset.getKey(), first_symbol);
+			if (save_selected_terrain_value != null
+					&& new_entry.character == save_selected_terrain_value.character) {
+				new_selected_terrain_value = new_entry;
+			}
+			selected_terrain.addItem(new_entry);
+
 		}
 		if (new_selected_terrain_value != null) {
 			selected_terrain.setSelectedItem(new_selected_terrain_value);
@@ -551,6 +695,8 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 			return tool_enable_get;
 		case SET:
 			return tool_enable_set;
+		case COORDINATES:
+			return tool_enable_coordinates;
 		}
 		return null;
 	}
@@ -704,12 +850,8 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 	}
 
 	protected void actionMenuUndo() {
-		// TODO Auto-generated method stub
+		undoManager.undo();
 
-	}
-
-	protected void actionMenuFind() {
-		// TODO Auto-generated method stub
 	}
 
 	@Override
@@ -760,6 +902,17 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 			CharAndSymbol new_character_item = (CharAndSymbol) selected_terrain.getSelectedItem();
 			if (new_character_item != null) {
 				setCellCharacter(prefab_index.index, cell_coordinate, new_character_item.character);
+			}
+		}
+			break;
+		case COORDINATES: {
+			try {
+				Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+				StringSelection content = new StringSelection(
+						"\"x\":" + cell_coordinate.x + ", \"y\":" + cell_coordinate.y + " ");
+				clipboard.setContents(content, null);
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
 		}
 			break;

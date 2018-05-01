@@ -30,10 +30,12 @@ public class Tiles {
 	public boolean iso = false;
 	public int pixelscale = 1;
 	public boolean force_character = false;
+	public int base_size_x = 1;
+	public int base_size_y = 1;
 
 	public static class TileVariant {
-		public TileVariant(int sprite) {
-			this.sprite = sprite;
+		public TileVariant(int sprite, int tile_offset) {
+			this.sprite = sprite - tile_offset;
 		}
 
 		public int sprite;
@@ -59,6 +61,7 @@ public class Tiles {
 		public ArrayList<TileVariant> background = new ArrayList<>();
 		public HashMap<String, Tile> additional_tiles = new HashMap<>();
 		public int tile_size_x_px, tile_size_y_px;
+		public int offset_x_px, offset_y_px;
 		public int num_tile_x, num_tile_y;
 		public boolean rotates;
 		public boolean multitile;
@@ -125,8 +128,8 @@ public class Tiles {
 		System.out.println("Loading tileset in " + tile_directory);
 		JSONObject tile_info = (JSONObject) ((JSONArray) json_tile.get("tile_info")).get(0);
 		// Default tile size i.e. unless re-specified with "tiles-new"
-		int base_size_x = (int) (long) tile_info.get("width");
-		int base_size_y = (int) (long) tile_info.get("height");
+		base_size_x = (int) (long) tile_info.get("width");
+		base_size_y = (int) (long) tile_info.get("height");
 		pixelscale = (int) (long) tile_info.getOrDefault("pixelscale", 1L);
 		iso = (Boolean) tile_info.getOrDefault("iso", Boolean.FALSE);
 		if (iso) {
@@ -136,33 +139,39 @@ public class Tiles {
 		JSONArray json_tiles = (JSONArray) json_tile.get("tiles");
 		if (json_tiles != null) {
 			loadTiles(json_tiles, Paths.get(tile_directory, base_tile_filename).toString(),
-					base_size_x, base_size_y);
+					base_size_x, base_size_y, 0, 0, 0);
 		}
 		JSONArray json_new_tiles = (JSONArray) json_tile.get("tiles-new");
 		if (json_new_tiles != null) {
+			int tile_idx_offset = 0;
 			for (int new_tile_idx = 0; new_tile_idx < json_new_tiles.size(); new_tile_idx++) {
 				JSONObject new_tile = (JSONObject) (json_new_tiles.get(new_tile_idx));
 				JSONArray sub_tiles = (JSONArray) new_tile.get("tiles");
 				int size_x = (int) (long) new_tile.getOrDefault("sprite_width", (long) base_size_x);
 				int size_y = (int) (long) new_tile.getOrDefault("sprite_height",
 						(long) base_size_y);
-				loadTiles(sub_tiles,
+				int offset_x = (int) (long) new_tile.getOrDefault("sprite_offset_x", (long) 0);
+				int offset_y = (int) (long) new_tile.getOrDefault("sprite_offset_y", (long) 0);
+				tile_idx_offset = loadTiles(sub_tiles,
 						Paths.get(tile_directory, (String) new_tile.get("file")).toString(), size_x,
-						size_y);
+						size_y, offset_x, offset_y, tile_idx_offset);
 			}
 		}
 	}
 
-	void loadTiles(JSONArray json_tiles, String file_image_path, int tile_size_x, int tile_size_y)
-			throws Exception {
+	int loadTiles(JSONArray json_tiles, String file_image_path, int tile_size_x, int tile_size_y,
+			int offset_x, int offset_y, int tile_idx_offset) throws Exception {
 		FileInputStream image_reader = new FileInputStream(new File(file_image_path));
 		BufferedImage image = ImageIO.read(new BufferedInputStream(image_reader));
-		loadTiles(json_tiles, image, tile_size_x, tile_size_y, tiles);
+		return loadTiles(json_tiles, image, tile_size_x, tile_size_y, offset_x, offset_y, tiles,
+				tile_idx_offset);
 	}
 
-	void loadTiles(JSONArray json_tiles, BufferedImage image, int tile_size_x, int tile_size_y,
-			HashMap<String, Tile> dst_tiles) throws Exception {
+	int loadTiles(JSONArray json_tiles, BufferedImage image, int tile_size_x, int tile_size_y,
+			int offset_x, int offset_y, HashMap<String, Tile> dst_tiles, int tile_idx_offset)
+			throws Exception {
 		int num_split_columns = image.getWidth() / tile_size_x;
+		int num_split_rows = image.getHeight() / tile_size_y;
 		for (int tile_idx = 0; tile_idx < json_tiles.size(); tile_idx++) {
 			JSONObject json_tile = (JSONObject) json_tiles.get(tile_idx);
 			Object tile_id = json_tile.get("id");
@@ -175,12 +184,12 @@ public class Tiles {
 			Object json_foreground = json_tile.get("fg");
 			if (json_foreground != null) {
 				loadTile(json_foreground, num_split_columns, tile_size_x, tile_size_y,
-						tile.foreground);
+						tile.foreground, tile_idx_offset);
 			}
 			Object json_background = json_tile.get("bg");
 			if (json_background != null) {
 				loadTile(json_background, num_split_columns, tile_size_x, tile_size_y,
-						tile.background);
+						tile.background, tile_idx_offset);
 			}
 
 			tile.rotates = (Boolean) json_tile.getOrDefault("rotates", Boolean.FALSE);
@@ -188,38 +197,44 @@ public class Tiles {
 
 			JSONArray json_additional_tiles = (JSONArray) json_tile.get("additional_tiles");
 			if (json_additional_tiles != null) {
-				loadTiles(json_additional_tiles, image, tile_size_x, tile_size_y,
-						tile.additional_tiles);
+				loadTiles(json_additional_tiles, image, tile_size_x, tile_size_y, offset_x,
+						offset_y, tile.additional_tiles, tile_idx_offset);
 			}
 
 			tile.tile_size_x_px = tile_size_x;
 			tile.tile_size_y_px = tile_size_y;
+			tile.offset_x_px = offset_x;
+			tile.offset_y_px = offset_y;
 			tile.num_tile_x = image.getWidth() / tile_size_x;
 			tile.num_tile_y = image.getHeight() / tile_size_y;
 			registerTile(tile_id, tile, dst_tiles);
 		}
+		return tile_idx_offset + num_split_columns * num_split_rows;
 	}
 
 	private void loadTile(Object json_tile_object, int num_split_columns, int tile_size_x,
-			int tile_size_y, ArrayList<TileVariant> variants) throws Exception {
+			int tile_size_y, ArrayList<TileVariant> variants, int tile_idx_offset)
+			throws Exception {
 		if (json_tile_object instanceof Long) {
-			variants.add(new TileVariant((int) (long) json_tile_object));
+			variants.add(new TileVariant((int) (long) json_tile_object, tile_idx_offset));
 		} else if (json_tile_object instanceof JSONArray) {
 			JSONArray json_variants = (JSONArray) json_tile_object;
 			for (int variant_idx = 0; variant_idx < json_variants.size(); variant_idx++) {
 				Object json_variant_object = json_variants.get(variant_idx);
 				if (json_variant_object instanceof Long) {
-					variants.add(new TileVariant((int) (long) json_variant_object));
+					variants.add(
+							new TileVariant((int) (long) json_variant_object, tile_idx_offset));
 				} else if (json_variant_object instanceof JSONObject) {
 					JSONObject json_variant = (JSONObject) json_variants.get(variant_idx);
 					Object json_sprite_object = json_variant.get("sprite");
 					if (json_sprite_object instanceof Long) {
-						variants.add(new TileVariant((int) (long) json_sprite_object));
+						variants.add(
+								new TileVariant((int) (long) json_sprite_object, tile_idx_offset));
 					} else if (json_sprite_object instanceof JSONArray) {
 						JSONArray json_sprites = (JSONArray) json_sprite_object;
 						for (int sprite_idx = 0; sprite_idx < json_sprites.size(); sprite_idx++) {
-							variants.add(
-									new TileVariant((int) (long) json_sprites.get(sprite_idx)));
+							variants.add(new TileVariant((int) (long) json_sprites.get(sprite_idx),
+									tile_idx_offset));
 						}
 					} else {
 						throw new Exception("Unknown sprite format:" + json_sprite_object);
@@ -365,18 +380,34 @@ public class Tiles {
 
 	public void render(Graphics2D dst, ArrayList<PrefabRendering.Label> labels,
 			RenderTile render_tile, int x, int y, int w, int h, int col, int row) {
-		int hw = (w + 1) / 2;
-		int hh = (h + 1) / 2;
+
+		int hwp = (w + 1) / 2;
+		int hhp = (h + 1) / 2;
 
 		if (render_tile.sprite == -1) {
 			if (render_tile.symbol != null) {
 				FontMetrics font_metric = dst.getFontMetrics();
 				labels.add(new PrefabRendering.Label(render_tile.symbol,
-						x + hw - font_metric.stringWidth(render_tile.symbol) / 2,
-						y + hh - font_metric.getHeight() / 2 + 8, col, row, render_tile.layer));
+						x + hwp - font_metric.stringWidth(render_tile.symbol) / 2,
+						y + hhp - font_metric.getHeight() / 2 + 8, col, row, render_tile.layer));
 			}
 			return;
 		}
+
+		if (render_tile.tile.tile_size_x_px != base_size_x) {
+			w = w * render_tile.tile.tile_size_x_px / base_size_x;
+		}
+
+		if (render_tile.tile.tile_size_y_px != base_size_y) {
+			h = h * render_tile.tile.tile_size_y_px / base_size_y;
+		}
+
+		int hw = (w + 1) / 2;
+		int hh = (h + 1) / 2;
+
+		int nx = x - (render_tile.tile.tile_size_x_px - base_size_x + render_tile.tile.offset_x_px)
+				* w / (2 * base_size_x);
+		int ny = y - (render_tile.tile.tile_size_y_px - base_size_y) * w / (2 * base_size_y);
 
 		int src_x = spriteToXSrc(render_tile.sprite, render_tile.tile);
 		int src_y = spriteToYSrc(render_tile.sprite, render_tile.tile);
@@ -389,7 +420,7 @@ public class Tiles {
 					src_y + render_tile.tile.tile_size_y_px, null);
 			dst.setTransform(old);
 		} else {
-			dst.drawImage(render_tile.tile.image, x, y, x + w, y + h, src_x, src_y,
+			dst.drawImage(render_tile.tile.image, nx, ny, nx + w, ny + h, src_x, src_y,
 					src_x + render_tile.tile.tile_size_x_px,
 					src_y + render_tile.tile.tile_size_y_px, null);
 		}

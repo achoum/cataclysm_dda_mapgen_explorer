@@ -7,6 +7,7 @@ import mapgen_explorer.content_index.ContentIndex.JsonFile;
 import mapgen_explorer.content_index.ContentIndex.Palette;
 import mapgen_explorer.content_index.ContentIndex.Prefab;
 import mapgen_explorer.resources_loader.Resources;
+import mapgen_explorer.window.MapgenExplorer;
 
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -16,13 +17,20 @@ import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
 
 import java.awt.*;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.StringSelection;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
 import java.util.Enumeration;
 
 // Display in a JTree of the content (currently, only the mapgen json files are supported).
-public class ContentIndexTree extends JTree {
+public class ContentIndexTree extends JTree implements MouseListener {
 
 	// Index of the content.
 	public ContentIndex content_index = new ContentIndex();
+	public MapgenExplorer parent;
 
 	// Selects the display icons.
 	DefaultTreeCellRenderer node_render = new DefaultTreeCellRenderer() {
@@ -45,8 +53,10 @@ public class ContentIndexTree extends JTree {
 		}
 	};
 
-	public ContentIndexTree() {
+	public ContentIndexTree(MapgenExplorer parent) {
+		this.parent = parent;
 		setCellRenderer(node_render);
+		addMouseListener(this);
 	}
 
 	boolean matchFilter(String filter, String value) {
@@ -162,6 +172,111 @@ public class ContentIndexTree extends JTree {
 			return (ContentIndex.Prefab) node_data;
 		}
 		return null;
+	}
+
+	@Override
+	public void mouseClicked(MouseEvent arg0) {
+
+	}
+
+	@Override
+	public void mouseEntered(MouseEvent arg0) {
+
+	}
+
+	@Override
+	public void mouseExited(MouseEvent arg0) {
+
+	}
+
+	@Override
+	public void mousePressed(MouseEvent e) {
+		if (e.isPopupTrigger())
+			myPopupEvent(e);
+	}
+
+	@Override
+	public void mouseReleased(MouseEvent e) {
+		if (e.isPopupTrigger())
+			myPopupEvent(e);
+	}
+
+	private void myPopupEvent(MouseEvent e) {
+		int x = e.getX();
+		int y = e.getY();
+		TreePath path = getPathForLocation(x, y);
+		if (path == null)
+			return;
+		setSelectionPath(path);
+		Object node = path.getLastPathComponent();
+		if (node == null)
+			return;
+		Object user_node = ((DefaultMutableTreeNode) node).getUserObject();
+		if (user_node == null)
+			return;
+		if (user_node instanceof ContentIndex.Directory) {
+			ContentIndex.Directory casted_node = (ContentIndex.Directory) user_node;
+			JPopupMenu popup = new JPopupMenu(casted_node.toString());
+			popup.add(new JMenuItem("Copy path to clipboard"))
+					.addActionListener(new ActionListener() {
+						@Override
+						public void actionPerformed(ActionEvent e) {
+							String string_path = casted_node.file.getAbsolutePath();
+							Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+							StringSelection content = new StringSelection(string_path);
+							clipboard.setContents(content, null);
+						}
+					});
+			popup.show(this, x, y);
+		} else if (user_node instanceof ContentIndex.JsonFile) {
+			ContentIndex.JsonFile casted_node = (ContentIndex.JsonFile) user_node;
+			JPopupMenu popup = new JPopupMenu(casted_node.toString());
+			popup.add(new JMenuItem("Copy path to clipboard"))
+					.addActionListener(new ActionListener() {
+						@Override
+						public void actionPerformed(ActionEvent e) {
+							String string_path = casted_node.file.getAbsolutePath();
+							Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+							StringSelection content = new StringSelection(string_path);
+							clipboard.setContents(content, null);
+						}
+					});
+			popup.show(this, x, y);
+		} else if (user_node instanceof ContentIndex.Prefab) {
+			Prefab casted_node = (ContentIndex.Prefab) user_node;
+			JPopupMenu popup = new JPopupMenu(casted_node.toString());
+			popup.add(new JMenuItem("Edit")).addActionListener(new ActionListener() {
+				@Override
+				public void actionPerformed(ActionEvent e) {
+					parent.openEditor(casted_node);
+				}
+			});
+			popup.add(new JMenuItem("Copy name to clipboard"))
+					.addActionListener(new ActionListener() {
+						@Override
+						public void actionPerformed(ActionEvent e) {
+							String string_path = casted_node.base_name;
+							Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+							StringSelection content = new StringSelection(string_path);
+							clipboard.setContents(content, null);
+						}
+					});
+			popup.show(this, x, y);
+		} else if (user_node instanceof ContentIndex.Palette) {
+			ContentIndex.Palette casted_node = (ContentIndex.Palette) user_node;
+			JPopupMenu popup = new JPopupMenu(casted_node.toString());
+			popup.add(new JMenuItem("Copy path to clipboard"))
+					.addActionListener(new ActionListener() {
+						@Override
+						public void actionPerformed(ActionEvent e) {
+							String string_path = casted_node.file.getAbsolutePath();
+							Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+							StringSelection content = new StringSelection(string_path);
+							clipboard.setContents(content, null);
+						}
+					});
+			popup.show(this, x, y);
+		}
 	}
 
 }

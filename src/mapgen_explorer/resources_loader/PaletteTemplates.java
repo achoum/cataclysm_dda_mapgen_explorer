@@ -13,7 +13,7 @@ import java.util.HashMap;
 // Index the content of the palette templates i.e. data/json/mapgen_palettes.
 public class PaletteTemplates {
 
-	HashMap<String, Palette> palettes = new HashMap<>();
+	public HashMap<String, Palette> palettes = new HashMap<>();
 
 	public void load(String directory) throws Exception {
 		File[] palette_files = (new File(directory)).listFiles();

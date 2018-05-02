@@ -8,4 +8,5 @@ public class Icons {
 	public Icon jsonfile;
 	public Icon prefab;
 	public Icon palette;
+	public Icon missing;
 }

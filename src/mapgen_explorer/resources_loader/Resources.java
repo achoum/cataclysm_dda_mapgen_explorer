@@ -29,6 +29,7 @@ public class Resources {
 		icons.jsonfile = getIcon("json-file.png");
 		icons.prefab = getIcon("prefab.png");
 		icons.palette = getIcon("palette.png");
+		icons.missing = getIcon("missing.png");
 
 		tiles = new Tiles();
 		tiles.load(main_directory, Config.default_tileset);

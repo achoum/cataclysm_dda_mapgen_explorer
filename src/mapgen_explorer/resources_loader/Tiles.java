@@ -12,6 +12,8 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 
 import javax.imageio.ImageIO;
+import javax.swing.Icon;
+
 import java.awt.*;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
@@ -26,7 +28,7 @@ import java.util.HashMap;
 // Mapping from a display symbol (e.g. "t_grass") to the sprite. Contains various functions to help the rendering.
 public class Tiles {
 
-	HashMap<String, Tile> tiles = new HashMap<>();
+	public HashMap<String, Tile> tiles = new HashMap<>();
 	public boolean iso = false;
 	public int pixelscale = 1;
 	public boolean force_character = false;
@@ -65,6 +67,50 @@ public class Tiles {
 		public int num_tile_x, num_tile_y;
 		public boolean rotates;
 		public boolean multitile;
+
+		public TileIcon getIcon(boolean foreground) {
+			return new TileIcon(this, foreground);
+		}
+
+		public static class TileIcon implements Icon {
+			Tile tile;
+			boolean foreground;
+
+			public TileIcon(Tile tile, boolean foreground) {
+				this.tile = tile;
+				this.foreground = foreground;
+			}
+
+			@Override
+			public int getIconHeight() {
+				return tile.tile_size_y_px;
+			}
+
+			@Override
+			public int getIconWidth() {
+				return tile.tile_size_x_px;
+			}
+
+			@Override
+			public void paintIcon(Component c, Graphics g, int x, int y) {
+				TileVariant src = null;
+				if (foreground && !tile.foreground.isEmpty()) {
+					src = tile.foreground.get(0);
+				} else if (!foreground && !tile.background.isEmpty()) {
+					src = tile.background.get(0);
+				}
+				if (src == null) {
+					//Resources.icons.missing.paintIcon(c, g, x, y);
+				} else {
+					int src_x = spriteToXSrc(src.sprite, tile);
+					int src_y = spriteToYSrc(src.sprite, tile);
+					g.drawImage(tile.image, x, y, x + tile.tile_size_x_px, y + tile.tile_size_y_px,
+							src_x, src_y, src_x + tile.tile_size_x_px, src_y + tile.tile_size_y_px,
+							null);
+				}
+			}
+		}
+
 	}
 
 	public static class RenderTile {
@@ -370,11 +416,11 @@ public class Tiles {
 		}
 	}
 
-	int spriteToXSrc(int sprite, Tile tile) {
+	public static int spriteToXSrc(int sprite, Tile tile) {
 		return (sprite % tile.num_tile_x) * tile.tile_size_x_px;
 	}
 
-	int spriteToYSrc(int sprite, Tile tile) {
+	public static int spriteToYSrc(int sprite, Tile tile) {
 		return (sprite / tile.num_tile_x) * tile.tile_size_y_px;
 	}
 

@@ -4,6 +4,7 @@ package mapgen_explorer.window;
 import java.awt.BorderLayout;
 import java.awt.EventQueue;
 import java.awt.FileDialog;
+import java.awt.Point;
 
 import javax.swing.JFrame;
 import javax.swing.JPanel;
@@ -24,10 +25,10 @@ import mapgen_explorer.component.CheckBoxList;
 import mapgen_explorer.component.PrefabRenderPanel;
 import mapgen_explorer.content_index.ContentIndex;
 import mapgen_explorer.render.PrefabRendering;
-import mapgen_explorer.resources_loader.Palette.Item;
 import mapgen_explorer.resources_loader.Resources;
 import mapgen_explorer.resources_loader.Tiles;
 import mapgen_explorer.utils.FileUtils;
+import mapgen_explorer.utils.JsonFormatter;
 import mapgen_explorer.utils.Logger;
 import mapgen_explorer.utils.RenderFilter;
 import mapgen_explorer.utils.Vector2i;
@@ -39,8 +40,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Map.Entry;
-
 import javax.swing.JMenuBar;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
@@ -69,6 +68,10 @@ import net.miginfocom.swing.MigLayout;
 import javax.swing.JLabel;
 import javax.swing.border.LineBorder;
 import javax.swing.ImageIcon;
+import javax.swing.JTextField;
+import javax.swing.JButton;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 
 public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.ActionCallBack {
 
@@ -78,6 +81,7 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 	String main_directory;
 	PrefabRenderPanel prefab_preview;
 	RSyntaxTextArea raw_json_editbox;
+	RTextScrollPane raw_json_editscroll;
 	UndoManager undoManager;
 	ContentIndex.Prefab prefab_index;
 	// Current selected tool.
@@ -93,7 +97,6 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 	// Timer used to trigger the refresh of the prefab rendering after the raw json editbox is modified.
 	Timer to_refresh_timer;
 	Timer check_reload;
-	private JComboBox selected_terrain;
 	private JComboBox selected_prefab;
 	boolean prefab_selector_is_beeing_updated = false;
 	boolean raw_json_is_being_updated = false;
@@ -101,6 +104,8 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 	boolean has_accepted_alert = false;
 	long last_file_modified = -1;
 	private JCheckBoxMenuItem chckbxmntmAutoreloadWhenFile;
+	JTextField selected_character;
+	PaletteExplorer palette_explorer;
 
 	enum eTool {
 		SET, // Apply a character on the map.
@@ -131,7 +136,7 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 				try {
 					String main_directory = "D:/games/Cataclysm/cataclysmdda-0.C-7328";
 					UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-					Resources.static_init("D:/games/Cataclysm/cataclysmdda-0.C-7328");
+					Resources.static_init(main_directory);
 					ContentIndex.Prefab to_open = new ContentIndex.Prefab(new File(
 							"D:/games/Cataclysm/cataclysmdda-0.C-7328/data/json/mapgen/apartment_con.json"),
 							0, "bandit_cabin");
@@ -251,6 +256,18 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		});
 		edit_undo.add(mntmRedo);
 
+		JSeparator separator_4 = new JSeparator();
+		edit_undo.add(separator_4);
+
+		JMenuItem mntmFormatCode = new JMenuItem("Format Code");
+		mntmFormatCode.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				formatCode();
+			}
+		});
+		edit_undo.add(mntmFormatCode);
+
 		JMenu mnView = new JMenu("View");
 		menuBar.add(mnView);
 
@@ -271,6 +288,15 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 				actionMenuShowStats();
 			}
 		});
+
+		JMenuItem mntmShowPaletteEditor = new JMenuItem("Show Palette");
+		mntmShowPaletteEditor.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				palette_explorer.setVisible(true);
+			}
+		});
+		mnView.add(mntmShowPaletteEditor);
 		mnView.add(edit_show_stats);
 
 		JSeparator separator_1 = new JSeparator();
@@ -353,7 +379,7 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 
 		JPanel panel_1 = new JPanel();
 		panel_2.add(panel_1, BorderLayout.EAST);
-		panel_1.setLayout(new MigLayout("", "[][]", "[][][][][][][]"));
+		panel_1.setLayout(new MigLayout("", "[]", "[][][][][][][]"));
 
 		JLabel lblNewLabel = new JLabel("Tools");
 		panel_1.add(lblNewLabel, "flowy,cell 0 0");
@@ -362,7 +388,7 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		tool_enable_set.setToolTipText("Change the terrain type.");
 		tool_enable_set.setIcon(
 				new ImageIcon(Editor.class.getResource("/mapgen_explorer/resources/edit.png")));
-		panel_1.add(tool_enable_set, "cell 0 1");
+		panel_1.add(tool_enable_set, "flowx,cell 0 1");
 		tool_enable_set.addItemListener(new ItemListener() {
 			@Override
 			public void itemStateChanged(ItemEvent e) {
@@ -371,35 +397,23 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		});
 		tool_enable_set.setSelected(true);
 
-		tool_enable_get = new JToggleButton("");
-		tool_enable_get.setToolTipText("Sample the terrain type.");
-		tool_enable_get.setIcon(
-				new ImageIcon(Editor.class.getResource("/mapgen_explorer/resources/pipette.png")));
-		tool_enable_get.addItemListener(new ItemListener() {
+		selected_character = new JTextField();
+		selected_character.addActionListener(new ActionListener() {
 			@Override
-			public void itemStateChanged(ItemEvent e) {
-				setTool(eTool.GET, false);
+			public void actionPerformed(ActionEvent e) {
+				String selected_character_string = selected_character.getText();
+				if (selected_character_string.length() == 1) {
+					char selected_character = selected_character_string.charAt(0);
+					palette_explorer.setSelectedCharacter(selected_character);
+				}
 			}
 		});
-		panel_1.add(tool_enable_get, "flowx,cell 1 1");
-
-		tool_enable_coordinates = new JToggleButton("");
-		tool_enable_coordinates.setToolTipText("Copy the cell coordinates in the clipboard.");
-		tool_enable_coordinates.addItemListener(new ItemListener() {
-			@Override
-			public void itemStateChanged(ItemEvent arg0) {
-				setTool(eTool.COORDINATES, false);
-			}
-		});
-		tool_enable_coordinates.setIcon(new ImageIcon(
-				Editor.class.getResource("/mapgen_explorer/resources/coordinates.png")));
-		panel_1.add(tool_enable_coordinates, "cell 1 1");
-
-		selected_terrain = new JComboBox();
-		panel_1.add(selected_terrain, "cell 0 2 2 1,growx");
+		selected_character.setHorizontalAlignment(SwingConstants.CENTER);
+		panel_1.add(selected_character, "flowx,cell 0 2");
+		selected_character.setColumns(2);
 
 		JSeparator separator_2 = new JSeparator();
-		panel_1.add(separator_2, "cell 0 3 2 1,growx");
+		panel_1.add(separator_2, "cell 0 3,growx");
 
 		JLabel lblDisplay = new JLabel("Display");
 		panel_1.add(lblDisplay, "cell 0 4");
@@ -419,12 +433,50 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 				}
 			}
 		});
-		panel_1.add(selected_prefab, "cell 0 5 2 1,growx");
+		panel_1.add(selected_prefab, "cell 0 5,growx");
 
 		CheckBoxList show_layers = new CheckBoxList();
 		show_layers.setForeground(Color.BLACK);
 		show_layers.setBorder(new LineBorder(Color.GRAY));
-		panel_1.add(show_layers, "cell 0 6 2 1,growx");
+		panel_1.add(show_layers, "cell 0 6,growx");
+
+		tool_enable_get = new JToggleButton("");
+		tool_enable_get.setToolTipText("Sample the terrain type.");
+		tool_enable_get.setIcon(
+				new ImageIcon(Editor.class.getResource("/mapgen_explorer/resources/pipette.png")));
+		tool_enable_get.addItemListener(new ItemListener() {
+			@Override
+			public void itemStateChanged(ItemEvent e) {
+				setTool(eTool.GET, false);
+			}
+		});
+		panel_1.add(tool_enable_get, "cell 0 1");
+
+		tool_enable_coordinates = new JToggleButton("");
+		tool_enable_coordinates.setToolTipText("Copy the cell coordinates in the clipboard.");
+		tool_enable_coordinates.addItemListener(new ItemListener() {
+			@Override
+			public void itemStateChanged(ItemEvent arg0) {
+				setTool(eTool.COORDINATES, false);
+			}
+		});
+		tool_enable_coordinates.setIcon(new ImageIcon(
+				Editor.class.getResource("/mapgen_explorer/resources/coordinates.png")));
+		panel_1.add(tool_enable_coordinates, "cell 0 1");
+
+		JLabel selected_symbol = new JLabel("none");
+		panel_1.add(selected_symbol, "cell 0 2");
+
+		JButton button = new JButton("");
+		button.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent arg0) {
+				palette_explorer.setVisible(true);
+			}
+		});
+		button.setIcon(
+				new ImageIcon(Editor.class.getResource("/mapgen_explorer/resources/palette.png")));
+		panel_1.add(button, "cell 0 2,alignx right");
 
 		JScrollPane console_scroll = new JScrollPane();
 		splitPane_1.setRightComponent(console_scroll);
@@ -483,7 +535,7 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		editor_console_panel.add(raw_json_edit_subpanel, BorderLayout.NORTH);
 		raw_json_edit_subpanel.setLayout(new BorderLayout(0, 0));
 
-		RTextScrollPane raw_json_editscroll = new RTextScrollPane();
+		raw_json_editscroll = new RTextScrollPane();
 		editor_console_panel.add(raw_json_editscroll, BorderLayout.CENTER);
 		raw_json_editscroll.setLineNumbersEnabled(true);
 		raw_json_editscroll.setFoldIndicatorEnabled(true);
@@ -512,6 +564,9 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		raw_json_editbox.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JSON_WITH_COMMENTS);
 		raw_json_editbox.setCodeFoldingEnabled(true);
 		raw_json_editbox.setLineWrap(true);
+		palette_explorer = new PaletteExplorer();
+		palette_explorer.setEditor(this);
+		palette_explorer.setVisible(true);
 
 		changeTheme(Config.default_editor_theme);
 		interface_loaded = true;
@@ -609,6 +664,7 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		prefab_preview.rendering.setShowGrid(menu_checkbox_show_grid.isSelected());
 		prefab_preview.askRedraw();
 		updateTitle();
+		palette_explorer.setPalette(prefab_preview.palette);
 	}
 
 	// Update the prefab render from the content of the editbox.
@@ -618,7 +674,7 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 			Logger.enableSaveErrors();
 			prefab_preview.loadPrefab(main_directory, prefab_index, raw_json_editbox.getText());
 			output += "Json parsing successful\n";
-			refreshSelectedTerrain();
+			//refreshSelectedTerrain();
 			refreshSelectedPrefab();
 		} catch (Exception e) {
 			output += "Json parsing failed:\n" + e.toString() + "\n";
@@ -630,44 +686,46 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		console_editbox.setText(output);
 	}
 
-	// Refresh the list of available terrains from the content of the palette of the prefab.
-	// It a terrain item was selected, the same terrain item will remain selected (if it still exists).
-	void refreshSelectedTerrain() {
-		CharAndSymbol save_selected_terrain_value = (CharAndSymbol) selected_terrain
-				.getSelectedItem();
-		selected_terrain.removeAllItems();
-		CharAndSymbol new_selected_terrain_value = null;
-		for (Entry<Character, ArrayList<Item>> terrain_itemset : prefab_preview.palette.char_to_id
-				.entrySet()) {
-
-			String first_symbol = null;
-			int num_symbols = 0;
-			for (Item terrain : terrain_itemset.getValue()) {
-				ArrayList<String> symbols = terrain.entries;
-				for (String symbol : symbols) {
-					if (first_symbol == null) {
-						first_symbol = symbol + " [" + terrain.layer.label + "]";
+	/*
+		// Refresh the list of available terrains from the content of the palette of the prefab.
+		// It a terrain item was selected, the same terrain item will remain selected (if it still exists).
+		void refreshSelectedTerrain() {
+			CharAndSymbol save_selected_terrain_value = (CharAndSymbol) selected_terrain
+					.getSelectedItem();
+			selected_terrain.removeAllItems();
+			CharAndSymbol new_selected_terrain_value = null;
+			for (Entry<Character, ArrayList<Item>> terrain_itemset : prefab_preview.palette.char_to_id
+					.entrySet()) {
+	
+				String first_symbol = null;
+				int num_symbols = 0;
+				for (Item terrain : terrain_itemset.getValue()) {
+					ArrayList<String> symbols = terrain.entries;
+					for (String symbol : symbols) {
+						if (first_symbol == null) {
+							first_symbol = symbol + " [" + terrain.layer.label + "]";
+						}
+						num_symbols++;
 					}
-					num_symbols++;
 				}
+				if (first_symbol == null) {
+					first_symbol = "Unknown";
+				} else if (num_symbols > 1) {
+					first_symbol += " (+" + num_symbols + ")";
+				}
+				CharAndSymbol new_entry = new CharAndSymbol(terrain_itemset.getKey(), first_symbol);
+				if (save_selected_terrain_value != null
+						&& new_entry.character == save_selected_terrain_value.character) {
+					new_selected_terrain_value = new_entry;
+				}
+				selected_terrain.addItem(new_entry);
+	
 			}
-			if (first_symbol == null) {
-				first_symbol = "Unknown";
-			} else if (num_symbols > 1) {
-				first_symbol += " (+" + num_symbols + ")";
+			if (new_selected_terrain_value != null) {
+				selected_terrain.setSelectedItem(new_selected_terrain_value);
 			}
-			CharAndSymbol new_entry = new CharAndSymbol(terrain_itemset.getKey(), first_symbol);
-			if (save_selected_terrain_value != null
-					&& new_entry.character == save_selected_terrain_value.character) {
-				new_selected_terrain_value = new_entry;
-			}
-			selected_terrain.addItem(new_entry);
-
 		}
-		if (new_selected_terrain_value != null) {
-			selected_terrain.setSelectedItem(new_selected_terrain_value);
-		}
-	}
+	*/
 
 	// Refresh the list of available prefab in the json file.
 	// It a prefab item was selected, the same prefab item will remain selected (if it still exists).
@@ -782,6 +840,7 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 					JOptionPane.YES_NO_CANCEL_OPTION);
 			if (dialogResult == JOptionPane.YES_OPTION) {
 				if (actionMenuSave()) {
+					palette_explorer.dispose();
 					dispose();
 				}
 			} else if (dialogResult == JOptionPane.NO_OPTION) {
@@ -790,6 +849,7 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 				return;
 			}
 		} else {
+			palette_explorer.dispose();
 			dispose();
 		}
 	}
@@ -891,7 +951,7 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 			try {
 				PrefabRendering.Cell cell = prefab_preview.rendering.getCell(cell_coordinate);
 				if (cell != null) {
-					selectTerrainByCharacter(cell.character);
+					palette_explorer.setSelectedCharacter(cell.character);
 				}
 			} catch (Exception e) {
 				e.printStackTrace();
@@ -899,9 +959,9 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		}
 			break;
 		case SET: {
-			CharAndSymbol new_character_item = (CharAndSymbol) selected_terrain.getSelectedItem();
-			if (new_character_item != null) {
-				setCellCharacter(prefab_index.index, cell_coordinate, new_character_item.character);
+			Character selected_character = palette_explorer.getSeletedCharacter();
+			if (selected_character != null) {
+				setCellCharacter(prefab_index.index, cell_coordinate, selected_character);
 			}
 		}
 			break;
@@ -956,8 +1016,15 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 			has_pending_edits = true;
 			updateTitle();
 			raw_json_is_being_updated = true;
-			raw_json_editbox.setText(content_array.toJSONString());
+			Point save_position = raw_json_editscroll.getViewport().getViewPosition();
+			raw_json_editbox.setText(JsonFormatter.formatJson(content_array));
 			raw_json_is_being_updated = false;
+			SwingUtilities.invokeLater(new Runnable() {
+				@Override
+				public void run() {
+					raw_json_editscroll.getViewport().setViewPosition(save_position);
+				}
+			});
 			refreshDisplayFromEditbox();
 		} catch (Exception e) {
 			raw_json_is_being_updated = false;
@@ -965,14 +1032,27 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 		}
 	}
 
-	// Change the selected terrain type according a character.
-	private void selectTerrainByCharacter(char character) {
-		for (int item_idx = 0; item_idx < selected_terrain.getItemCount(); item_idx++) {
-			CharAndSymbol item = (CharAndSymbol) selected_terrain.getItemAt(item_idx);
-			if (item.character == character) {
-				selected_terrain.setSelectedIndex(item_idx);
-				break;
-			}
+	void formatCode() {
+		try {
+			JSONParser parser = new JSONParser();
+			Object content = parser.parse(raw_json_editbox.getText());
+			if (!(content instanceof JSONArray))
+				throw new Exception("Not a prefab");
+			JSONArray content_array = (JSONArray) content;
+			raw_json_is_being_updated = true;
+			Point save_position = raw_json_editscroll.getViewport().getViewPosition();
+			raw_json_editbox.setText(JsonFormatter.formatJson(content_array));
+			raw_json_is_being_updated = false;
+			SwingUtilities.invokeLater(new Runnable() {
+				@Override
+				public void run() {
+					raw_json_editscroll.getViewport().setViewPosition(save_position);
+				}
+			});
+			refreshDisplayFromEditbox();
+		} catch (Exception e) {
+			raw_json_is_being_updated = false;
+			e.printStackTrace();
 		}
 	}
 

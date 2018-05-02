@@ -11,6 +11,7 @@ import java.awt.font.FontRenderContext;
 import java.awt.font.TextLayout;
 import java.awt.geom.AffineTransform;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
@@ -731,6 +732,14 @@ public class PrefabRendering {
 	// Get the cell data from its coordinates.
 	public Cell getCell(Vector2i cell_coordinate) throws Exception {
 		return cells[cellIdx(cell_coordinate.y, cell_coordinate.x)];
+	}
+
+	public HashMap<Character, Integer> getCharacterUsageMap() {
+		HashMap<Character, Integer> map = new HashMap<Character, Integer>();
+		for (Cell cell : cells) {
+			map.put(cell.character, map.getOrDefault(cell.character, 0) + 1);
+		}
+		return map;
 	}
 
 }

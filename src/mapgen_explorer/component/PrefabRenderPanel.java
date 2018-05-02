@@ -16,6 +16,7 @@ import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.io.FileReader;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 // Render of a prefab.
 public class PrefabRenderPanel extends JPanel
@@ -30,7 +31,7 @@ public class PrefabRenderPanel extends JPanel
 	// Buffer for the rendering of the overlays (e.g. the infobox).
 	BufferedImage overlay_buffer = null;
 	// The palette of symbols used by the prefab. Assembled from the symbol defined in the prefab and the symbol defined in the external palettes.
-	public Palette palette = null;
+	public Palette palette = new Palette();
 	// The zoom. Size of a cell in pixel.
 	int cell_drawing_size_in_px = 32;
 	// Drawing origin of the prefab. For "moving around".
@@ -338,7 +339,7 @@ public class PrefabRenderPanel extends JPanel
 		if (!(item instanceof JSONObject))
 			throw new Exception("Not a prefab");
 		json_prefab = (JSONObject) item;
-		palette = new Palette();
+		palette.clear();
 		palette.loadFromPrefab(main_directory, json_prefab);
 		palette.loadFromJsonContentArray(content_array);
 		rendering = new PrefabRendering(json_prefab, palette);
@@ -368,5 +369,4 @@ public class PrefabRenderPanel extends JPanel
 		revalidate();
 		repaint();
 	}
-
 }

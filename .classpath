@@ -5,6 +5,5 @@
 	<classpathentry kind="lib" path="libs/miglayout15-swing.jar"/>
 	<classpathentry kind="lib" path="libs/rsyntaxtextarea-3.0.0.jar" sourcepath="D:/projects/test/RSyntaxTextArea-master/build/distributions/rsyntaxtextarea-3.0.0-SNAPSHOT-src.zip"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.junit.JUNIT_CONTAINER/4"/>
-	<classpathentry kind="lib" path="libs/json-simple-1.1.1.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

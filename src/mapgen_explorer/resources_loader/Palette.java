@@ -59,7 +59,7 @@ public class Palette {
 	}
 
 	// Load the palette from the prefab definition.
-	void loadFromContentObject(JSONObject json_object) throws Exception {
+	public void loadFromContentObject(JSONObject json_object) throws Exception {
 
 		for (eLayer layer : eLayer.values()) {
 			if (layer.sources == null) {
@@ -239,6 +239,10 @@ public class Palette {
 
 	public void importPalette(Palette other) {
 		char_to_id.putAll(other.char_to_id);
+	}
+
+	public void clear() {
+		char_to_id.clear();
 	}
 
 }

@@ -1,3 +1,11 @@
+Version 0.5 (2 May 2018)
+	New features
+	- Palette Explorer. Visualize the tiles, the palettes and their usage (for global templates and palette in mapgens). Replaces the terrain selector in the editor.
+	- Automatic formatting of the json code following the guideline https://github.com/CleverRaven/Cataclysm-DDA/blob/9353824cf8bf64fb8e112ca4e79d1aa0538781ad/doc/JSON_STYLE.md.
+
+	Modifications
+	- The pen tool (the only mouse tool so far) don't shuffle around the fields in the json text editor. In addition
+
 Version 0.4 (1 May 2018)
 	New features
 	- Shortcuts in the editor (Ctrl+S, Ctrl+Alt+S, Ctrl+W, Ctrl+F5, F5).

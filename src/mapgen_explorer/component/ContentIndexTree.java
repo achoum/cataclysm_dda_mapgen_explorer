@@ -7,7 +7,9 @@ import mapgen_explorer.content_index.ContentIndex.JsonFile;
 import mapgen_explorer.content_index.ContentIndex.Palette;
 import mapgen_explorer.content_index.ContentIndex.Prefab;
 import mapgen_explorer.resources_loader.Resources;
+import mapgen_explorer.utils.Logger;
 import mapgen_explorer.window.MapgenExplorer;
+import mapgen_explorer.window.PaletteExplorer;
 
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -16,6 +18,10 @@ import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
 
+import org.json.simple.JSONArray;
+import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
+
 import java.awt.*;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.StringSelection;
@@ -23,6 +29,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.io.FileReader;
 import java.util.Enumeration;
 
 // Display in a JTree of the content (currently, only the mapgen json files are supported).
@@ -163,13 +170,16 @@ public class ContentIndexTree extends JTree implements MouseListener {
 	}
 
 	// Returns the selected prefab. Returns null if not prefab is selected.
-	public ContentIndex.Prefab getSelectedPrefab() {
+	public Object getSelectedPrefab() {
 		DefaultMutableTreeNode node = (DefaultMutableTreeNode) getLastSelectedPathComponent();
 		if (node == null)
 			return null;
 		Object node_data = node.getUserObject();
 		if (node_data instanceof ContentIndex.Prefab) {
 			return (ContentIndex.Prefab) node_data;
+		}
+		if (node_data instanceof ContentIndex.Palette) {
+			return (ContentIndex.Palette) node_data;
 		}
 		return null;
 	}
@@ -265,6 +275,32 @@ public class ContentIndexTree extends JTree implements MouseListener {
 		} else if (user_node instanceof ContentIndex.Palette) {
 			ContentIndex.Palette casted_node = (ContentIndex.Palette) user_node;
 			JPopupMenu popup = new JPopupMenu(casted_node.toString());
+			popup.add(new JMenuItem("Open with Palette Explorer"))
+					.addActionListener(new ActionListener() {
+						@Override
+						public void actionPerformed(ActionEvent e) {
+							try {
+								mapgen_explorer.resources_loader.Palette palette = new mapgen_explorer.resources_loader.Palette();
+								JSONParser parser = new JSONParser();
+								FileReader reader = new FileReader(casted_node.file);
+								Object content = parser.parse(reader);
+								if (!(content instanceof JSONArray))
+									throw new Exception("Not a prefab");
+								JSONArray content_array = (JSONArray) content;
+								Object item = content_array.get(casted_node.index);
+								if (!(item instanceof JSONObject))
+									throw new Exception("Not a palette");
+								palette.loadFromContentObject((JSONObject) item);
+								PaletteExplorer palette_explorer = new PaletteExplorer();
+								palette_explorer.setPalette(palette);
+								palette_explorer.setVisible(true);
+								palette_explorer
+										.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+							} catch (Exception ex) {
+								Logger.fatal(ex);
+							}
+						}
+					});
 			popup.add(new JMenuItem("Copy path to clipboard"))
 					.addActionListener(new ActionListener() {
 						@Override

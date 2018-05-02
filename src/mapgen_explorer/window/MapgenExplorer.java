@@ -211,6 +211,18 @@ public class MapgenExplorer extends JFrame implements WindowListener {
 				JMenu mnView = new JMenu("View");
 				menuBar.add(mnView);
 				{
+					JMenuItem mntmOpenGlobalPalette = new JMenuItem("Palette Explorer on Templates");
+					mntmOpenGlobalPalette.addActionListener(new ActionListener() {
+						public void actionPerformed(ActionEvent e) {
+							PaletteExplorer palette_editor = new PaletteExplorer();
+							palette_editor.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+							palette_editor.setPalette(Resources.palette_templates);
+							palette_editor.setVisible(true);
+						}
+					});
+					mnView.add(mntmOpenGlobalPalette);
+				}
+				{
 					mnTilesets = new JMenu("Tilsets");
 					mnView.add(mnTilesets);
 				}
@@ -309,9 +321,9 @@ public class MapgenExplorer extends JFrame implements WindowListener {
 	}
 
 	protected void menuOpenInEditor() {
-		ContentIndex.Prefab newly_selected_prefab = prefab_list.getSelectedPrefab();
-		if (newly_selected_prefab != null) {
-			openEditor(newly_selected_prefab);
+		Object newly_selected_object = prefab_list.getSelectedPrefab();
+		if (newly_selected_object instanceof ContentIndex.Prefab) {
+			openEditor((ContentIndex.Prefab) newly_selected_object);
 		}
 	}
 
@@ -419,10 +431,11 @@ public class MapgenExplorer extends JFrame implements WindowListener {
 	}
 
 	public void reloadSelectedPrefab() {
-		ContentIndex.Prefab newly_selected_prefab = prefab_list.getSelectedPrefab();
-		if (newly_selected_prefab != null) {
+		Object newly_selected_object = prefab_list.getSelectedPrefab();
+		if (newly_selected_object instanceof ContentIndex.Prefab) {
 			try {
-				prefab_preview.loadPrefab(main_directory, newly_selected_prefab);
+				prefab_preview.loadPrefab(main_directory,
+						(ContentIndex.Prefab) newly_selected_object);
 			} catch (Exception e) {
 				e.printStackTrace();
 			}

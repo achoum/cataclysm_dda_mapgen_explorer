@@ -42,6 +42,9 @@ _How to use your own editor_
 
 ![Imgur](https://raw.githubusercontent.com/achoum/cataclysm_dda_mapgen_explorer/master/screen/tutorial.png)
 
+_The palette explorer_
+
+![Imgur](https://raw.githubusercontent.com/achoum/cataclysm_dda_mapgen_explorer/master/screen/7.png)
 
 ## Features
 

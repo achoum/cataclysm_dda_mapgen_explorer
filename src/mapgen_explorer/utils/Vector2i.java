@@ -15,6 +15,10 @@ public class Vector2i {
 	public Vector2i() {
 	}
 
+	public Vector2i(Vector2i a) {
+		set(a);
+	}
+
 	@Override
 	public boolean equals(Object p) {
 		if (p instanceof Vector2i)

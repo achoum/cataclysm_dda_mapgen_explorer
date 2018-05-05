@@ -21,7 +21,7 @@ public class About extends JDialog {
         setModalityType(ModalityType.APPLICATION_MODAL);
         setModal(true);
         setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-        setBounds(100, 100, 567, 320);
+        setBounds(100, 100, 663, 320);
         getContentPane().setLayout(new BorderLayout());
         		setIconImage(Toolkit.getDefaultToolkit()
 				.getImage(Editor.class.getResource("/mapgen_explorer/resources/prefab.png")));
@@ -39,6 +39,11 @@ public class About extends JDialog {
                         "Mapgen Explorer for Cataclysm DDA\r\nVersion " + Config.localVersion() + " (" + Config.release_date + ")\r\n------------------------------------\r\n\r\nhttps://github.com/achoum/cataclysm_dda_mapgen_explorer\r\n\r\nBy Achoum (achoum@gmail.com)\r\nhttp://blog.mathieu.guillame-bert.com");
                 scrollPane.setViewportView(txtrPrefabExplorerFor);
             }
+        }
+        {
+        	JLabel label = new JLabel("");
+        	label.setIcon(new ImageIcon(About.class.getResource("/mapgen_explorer/resources/profile_large.png")));
+        	contentPanel.add(label, BorderLayout.EAST);
         }
         {
             JPanel buttonPane = new JPanel();

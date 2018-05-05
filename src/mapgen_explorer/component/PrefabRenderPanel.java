@@ -51,9 +51,17 @@ public class PrefabRenderPanel extends JPanel
 	// The pre-rendering structure of the prefab.
 	public PrefabRendering rendering;
 
+	Vector2i begin_action_coordinates = new Vector2i();
+	Vector2i current_action_coordinates = new Vector2i();
+	boolean is_in_action = false;
+
 	public interface ActionCallBack {
 
-		void action(Vector2i cell_coordinate);
+		void beginAction(Vector2i cell_coordinate);
+
+		void continueAction(Vector2i begin_cell_coordinates, Vector2i current_cell_coordinate);
+
+		void endAction(Vector2i begin_cell_coordinates, Vector2i final_cell_coordinate);
 	}
 
 	public PrefabRenderPanel() {
@@ -73,18 +81,12 @@ public class PrefabRenderPanel extends JPanel
 	public void mouseMoved(MouseEvent evt) {
 		last_mouse_x = evt.getX();
 		last_mouse_y = evt.getY();
-		askRedraw();
-	}
-
-	// Send an action to the callback (i.e. the editor).
-	void sendActionCallBack() {
 		Vector2i cell_coordinates = screenToCellCoordinates(last_mouse_x - render_origin_x,
 				last_mouse_y - render_origin_y);
-		if (cell_coordinates != null
-				&& !last_action_callback_cell_position.equals(cell_coordinates)) {
-			last_action_callback_cell_position.set(cell_coordinates);
-			action_callback.action(cell_coordinates);
+		if (cell_coordinates != null) {
+			current_action_coordinates.set(cell_coordinates);
 		}
+		askRedraw();
 	}
 
 	@Override
@@ -92,10 +94,19 @@ public class PrefabRenderPanel extends JPanel
 		last_mouse_x = evt.getX();
 		last_mouse_y = evt.getY();
 		active_button = evt.getButton();
-		if (action_callback != null && active_button == MouseEvent.BUTTON1) {
-			// Action.
-			sendActionCallBack();
+		Vector2i cell_coordinates = screenToCellCoordinates(last_mouse_x - render_origin_x,
+				last_mouse_y - render_origin_y);
+		if (cell_coordinates != null) {
+			begin_action_coordinates.set(cell_coordinates);
+			current_action_coordinates.set(cell_coordinates);
+			if (action_callback != null && active_button == MouseEvent.BUTTON1) {
+				if (cell_coordinates != null) {
+					is_in_action = true;
+					action_callback.beginAction(begin_action_coordinates);
+				}
+			}
 		}
+		askRedraw();
 	}
 
 	@Override
@@ -110,13 +121,29 @@ public class PrefabRenderPanel extends JPanel
 			render_origin_y += dy;
 		} else {
 			// Action.
-			sendActionCallBack();
+			Vector2i cell_coordinates = screenToCellCoordinates(last_mouse_x - render_origin_x,
+					last_mouse_y - render_origin_y);
+			if (cell_coordinates != null
+					&& !last_action_callback_cell_position.equals(cell_coordinates)) {
+				current_action_coordinates.set(cell_coordinates);
+				last_action_callback_cell_position.set(cell_coordinates);
+				action_callback.continueAction(begin_action_coordinates,
+						current_action_coordinates);
+			}
 		}
 		askRedraw();
 	}
 
 	@Override
 	public void mouseReleased(MouseEvent e) {
+		is_in_action = false;
+		Vector2i cell_coordinates = screenToCellCoordinates(last_mouse_x - render_origin_x,
+				last_mouse_y - render_origin_y);
+		if (cell_coordinates != null) {
+			current_action_coordinates.set(cell_coordinates);
+			action_callback.endAction(begin_action_coordinates, cell_coordinates);
+		}
+		askRedraw();
 	}
 
 	// In/out zoom with the mouse wheel.
@@ -203,20 +230,51 @@ public class PrefabRenderPanel extends JPanel
 		Graphics2D g = (Graphics2D) overlay_buffer.getGraphics();
 		g.setBackground(new Color(255, 255, 255, 0));
 		g.clearRect(0, 0, overlay_buffer.getWidth(), overlay_buffer.getHeight());
-		Vector2i selected_cell_coordinates = screenToCellCoordinates(last_mouse_x - render_origin_x,
-				last_mouse_y - render_origin_y);
-		if (selected_cell_coordinates != null) {
-			// Highlight of the cell under the mouse.
-			Vector2i cell_screen_coordinates = cellToScreeCoordinates(selected_cell_coordinates.x,
-					selected_cell_coordinates.y);
-			g.setColor(new Color(0, 255, 0));
-			g.drawRect(cell_screen_coordinates.x, cell_screen_coordinates.y,
-					cell_drawing_size_in_px, cell_drawing_size_in_px);
+
+		if (last_mouse_x != -1) {
+
+			Vector2i cell_coord_1 = new Vector2i(current_action_coordinates);
+			Vector2i cell_coord_2;
+			if (is_in_action) {
+				cell_coord_2 = new Vector2i(begin_action_coordinates);
+				if (cell_coord_1.x > cell_coord_2.x) {
+					int swap = cell_coord_1.x;
+					cell_coord_1.x = cell_coord_2.x;
+					cell_coord_2.x = swap;
+				}
+				if (cell_coord_1.y > cell_coord_2.y) {
+					int swap = cell_coord_1.y;
+					cell_coord_1.y = cell_coord_2.y;
+					cell_coord_2.y = swap;
+				}
+			} else {
+				cell_coord_2 = cell_coord_1;
+			}
+
+			Vector2i cell_screen_coord_1 = cellToScreeCoordinates(cell_coord_1.x, cell_coord_1.y);
+			Vector2i cell_screen_coord_2 = cellToScreeCoordinates(cell_coord_2.x, cell_coord_2.y);
+
+			if (is_in_action) {
+				g.setColor(new Color(255, 0, 0));
+			} else {
+				g.setColor(new Color(0, 255, 0));
+			}
+			g.drawRect(cell_screen_coord_1.x, cell_screen_coord_1.y,
+					(cell_screen_coord_2.x - cell_screen_coord_1.x) + cell_drawing_size_in_px,
+					(cell_screen_coord_2.y - cell_screen_coord_1.y) + cell_drawing_size_in_px);
 			// Information box.
-			ArrayList<String> information = new ArrayList<>();
-			rendering.appendCellDescription(selected_cell_coordinates.x,
-					selected_cell_coordinates.y, information);
-			renderInfo(g, overlay_buffer, last_mouse_x, last_mouse_y, information);
+			ArrayList<String> description = new ArrayList<>();
+
+			if (cell_coord_1.equals(cell_coord_2)) {
+				description.add(String.format("x:%d y:%d", cell_coord_1.x, cell_coord_1.y));
+			} else {
+				description.add(String.format("x: [%d, %d] y: [%d, %d]", cell_coord_1.x,
+						cell_coord_2.x, cell_coord_1.y, cell_coord_2.y));
+			}
+
+			rendering.appendCellDescription(current_action_coordinates.x,
+					current_action_coordinates.y, description);
+			renderInfo(g, overlay_buffer, last_mouse_x, last_mouse_y, description);
 		}
 	}
 
@@ -250,6 +308,8 @@ public class PrefabRenderPanel extends JPanel
 
 	// Project the mouse coordinate to a prefab cell coordinate.
 	private Vector2i screenToCellCoordinates(int x, int y) {
+		if (rendering == null)
+			return null;
 		int cell_x = Math.floorDiv(x, cell_drawing_size_in_px);
 		int cell_y = Math.floorDiv(y, cell_drawing_size_in_px);
 		if (cell_x < 0 || cell_x >= rendering.num_cols || cell_y < 0
@@ -340,8 +400,7 @@ public class PrefabRenderPanel extends JPanel
 			throw new Exception("Not a prefab");
 		json_prefab = (JSONObject) item;
 		palette.clear();
-		palette.loadFromPrefab(main_directory, json_prefab);
-		palette.loadFromJsonContentArray(content_array);
+		palette.loadFromPrefab(main_directory, json_prefab, content_array);
 		rendering = new PrefabRendering(json_prefab, palette);
 		rendering.update();
 	}

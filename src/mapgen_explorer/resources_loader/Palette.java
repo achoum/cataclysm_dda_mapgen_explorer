@@ -11,6 +11,7 @@ import mapgen_explorer.utils.RenderFilter.eLayer;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map.Entry;
 
 // Symbol palette i.e. mapping between a character to a list of item names.
 public class Palette {
@@ -19,48 +20,64 @@ public class Palette {
 		public RenderFilter.eLayer layer;
 		public ArrayList<String> entries = new ArrayList<>();
 		public int chance = 1;
+
+		public Item clone() {
+			Item item = new Item();
+			item.layer = layer;
+			item.entries.addAll(entries);
+			item.chance = chance;
+			return item;
+		}
 	}
 
 	public HashMap<Character, ArrayList<Item>> char_to_id = new HashMap<>();
+	public String fill_ter = null;
 
 	// Load the palette from the prefab definition. Load the palette templates if any.
-	public void loadFromPrefab(String main_directory, JSONObject json_prefab) throws Exception {
+	public void loadFromPrefab(String main_directory, JSONObject json_prefab,
+			JSONArray content_array) throws Exception {
+		PaletteTemplates palette_template = new PaletteTemplates();
+		palette_template.loadFromContentArray(content_array);
 		JSONObject json_object = (JSONObject) json_prefab.get("object");
+		fill_ter = (String) json_object.get("fill_ter");
 		loadFromContentObject(json_object);
 		JSONArray json_palettes = (JSONArray) json_object.get("palettes");
 		if (json_palettes != null) {
 			for (int input_palette_idx = 0; input_palette_idx < json_palettes
 					.size(); input_palette_idx++) {
 				String input_palette_name = (String) json_palettes.get(input_palette_idx);
-				loadFromGlobalTemplate(input_palette_name);
+				loadPaletteTemplate(input_palette_name, palette_template);
 			}
 		}
 	}
 
 	// Add the content of a palette template (i.e. the palette defined in "data/json/mapgen_palettes") to this palette.
-	void loadFromGlobalTemplate(String input_palette_name) {
-		Palette palette_template = Resources.palette_templates.palettes.get(input_palette_name);
-		if (palette_template == null) {
-			Logger.consoleWarnings("Palette template \"" + input_palette_name + "\" no found.");
+	void loadPaletteTemplate(String input_palette_name, PaletteTemplates local_palette_template) {
+		Palette local_palette = local_palette_template.palettes.get(input_palette_name);
+		if (local_palette != null) {
+			mergePalette(local_palette);
 			return;
 		}
-		char_to_id.putAll(palette_template.char_to_id);
-	}
 
-	public void loadFromJsonContentArray(JSONArray array) throws Exception {
-		for (int item_idx = 0; item_idx < array.size(); item_idx++) {
-			JSONObject item = (JSONObject) array.get(item_idx);
-			String type = (String) item.get("type");
-			if (!type.equals("palette")) {
-				continue;
-			}
-			loadFromContentObject(item);
+		Palette global_palette = Resources.global_palette_templates.palettes
+				.get(input_palette_name);
+		if (global_palette != null) {
+			mergePalette(global_palette);
+			return;
 		}
+
+		Palette indexed_palette = Resources.indexed_palette_templates.palettes
+				.get(input_palette_name);
+		if (indexed_palette != null) {
+			mergePalette(indexed_palette);
+			return;
+		}
+
+		Logger.consoleWarnings("Palette template \"" + input_palette_name + "\" no found.");
 	}
 
 	// Load the palette from the prefab definition.
 	public void loadFromContentObject(JSONObject json_object) throws Exception {
-
 		for (eLayer layer : eLayer.values()) {
 			if (layer.sources == null) {
 				continue;
@@ -72,12 +89,10 @@ public class Palette {
 				}
 			}
 		}
-
 		JSONObject json_mapping = (JSONObject) json_object.get("mapping");
 		if (json_mapping != null) {
 			loadFromMappingObject(json_mapping);
 		}
-
 	}
 
 	RenderFilter.eLayer sourceToLayer(String query_source) {
@@ -237,8 +252,14 @@ public class Palette {
 		}
 	}
 
-	public void importPalette(Palette other) {
-		char_to_id.putAll(other.char_to_id);
+	public void mergePalette(Palette src) {
+		for (Entry<Character, ArrayList<Item>> other_p : src.char_to_id.entrySet()) {
+			ArrayList<Item> new_item_list = new ArrayList<>();
+			for (Item item : other_p.getValue()) {
+				new_item_list.add(item.clone());
+			}
+			char_to_id.put(other_p.getKey(), new_item_list);
+		}
 	}
 
 	public void clear() {

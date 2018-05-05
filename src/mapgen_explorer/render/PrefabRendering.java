@@ -100,7 +100,14 @@ public class PrefabRendering {
 
 	public void updateTerrain(JSONObject json_object) throws Exception {
 		JSONArray json_row = (JSONArray) json_object.get("rows");
+		if (json_row == null) {
+			throw new Exception("Cannot find field \"rows\"");
+		}
 		String fill_ter = (String) json_object.get("fill_ter");
+		if (fill_ter == null) {
+			Logger.consoleWarnings("Cannot find field \"fill_ter\"");
+			fill_ter = "no_fill_ter";
+		}
 		num_rows = json_row.size();
 		num_cols = ((String) json_row.get(0)).length();
 		cells = new Cell[num_rows * num_cols];
@@ -115,11 +122,6 @@ public class PrefabRendering {
 				Cell cell = new Cell();
 				cells[cellIdx(row_idx, col_idx)] = cell;
 				cell.character = row.charAt(col_idx);
-
-				if (cell.character == '#') {
-					int a = 50;
-				}
-
 				ArrayList<Item> palette_item_set = palette.char_to_id.get(cell.character);
 				if (palette_item_set == null) {
 					Resources.tiles.appendTilesFromSymbol(cell.tiles, fill_ter, json_row, row_idx,
@@ -673,8 +675,6 @@ public class PrefabRendering {
 	public void appendCellDescription(int x, int y, ArrayList<String> description)
 			throws Exception {
 		Cell cell = cells[cellIdx(y, x)];
-		// Coordinates.
-		description.add(String.format("x:%d y:%d", x, y));
 		// Symbol.
 		String label = String.format("Symbol: '%c'", cell.character);
 		if (cell.unknow_cell_character) {

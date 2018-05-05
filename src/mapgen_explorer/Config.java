@@ -10,7 +10,7 @@ import java.util.prefs.Preferences;
 public class Config {
 	public final static String default_tileset = "ChestHoleTileset";
 	public final static String unknown_local_version = "UNKNOWN";
-	public static String release_date = "29 April 2018";
+	public static String release_date = "5 May 2018";
 	public static String default_editor_theme = "dark";
 	public static String remote_version_path = "https://raw.githubusercontent.com/achoum/cataclysm_dda_mapgen_explorer/master/src/mapgen_explorer/VERSION";
 	public static String local_version_path = "mapgen_explorer/VERSION";

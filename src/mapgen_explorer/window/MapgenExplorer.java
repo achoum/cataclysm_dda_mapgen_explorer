@@ -216,7 +216,7 @@ public class MapgenExplorer extends JFrame implements WindowListener {
 						public void actionPerformed(ActionEvent e) {
 							PaletteExplorer palette_editor = new PaletteExplorer();
 							palette_editor.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-							palette_editor.setPalette(Resources.palette_templates);
+							palette_editor.setPalette(Resources.global_palette_templates);
 							palette_editor.setVisible(true);
 						}
 					});

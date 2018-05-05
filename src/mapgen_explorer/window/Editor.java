@@ -134,11 +134,11 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 			@Override
 			public void run() {
 				try {
-					String main_directory = "D:/games/Cataclysm/cataclysmdda-0.C-7328";
+					String main_directory = "D:/games/Cataclysm/Cataclysm-DDA";
 					UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
 					Resources.static_init(main_directory);
 					ContentIndex.Prefab to_open = new ContentIndex.Prefab(new File(
-							"D:/games/Cataclysm/cataclysmdda-0.C-7328/data/json/mapgen/apartment_con.json"),
+							"D:/games/Cataclysm/Cataclysm-DDA/data/json/mapgen/bike_shop.json"),
 							0, "bandit_cabin");
 					Editor frame = new Editor(main_directory);
 					frame.setVisible(true);
@@ -943,9 +943,8 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 	public void windowOpened(WindowEvent e) {
 	}
 
-	// Call back from clicking with the left mouse button on the prefab rendering.
 	@Override
-	public void action(Vector2i cell_coordinate) {
+	public void beginAction(Vector2i cell_coordinate) {
 		switch (tool) {
 		case GET: {
 			try {
@@ -965,12 +964,65 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 			}
 		}
 			break;
+		case COORDINATES:
+			break;
+		default:
+			break;
+		}
+	}
+
+	@Override
+	public void continueAction(Vector2i begin_cell_coordinates, Vector2i current_cell_coordinate) {
+		switch (tool) {
+		case GET:
+		case SET:
+			beginAction(current_cell_coordinate);
+			break;
+		case COORDINATES:
+			break;
+		default:
+			break;
+		}
+
+	}
+
+	@Override
+	public void endAction(Vector2i begin_cell_coordinates, Vector2i final_cell_coordinate) {
+		switch (tool) {
+		case GET:
+		case SET:
+			beginAction(final_cell_coordinate);
+			break;
 		case COORDINATES: {
 			try {
+
+				Vector2i cell_coord_1 = new Vector2i(begin_cell_coordinates);
+				Vector2i cell_coord_2 = new Vector2i(final_cell_coordinate);
+				if (cell_coord_1.x > cell_coord_2.x) {
+					int swap = cell_coord_1.x;
+					cell_coord_1.x = cell_coord_2.x;
+					cell_coord_2.x = swap;
+				}
+				if (cell_coord_1.y > cell_coord_2.y) {
+					int swap = cell_coord_1.y;
+					cell_coord_1.y = cell_coord_2.y;
+					cell_coord_2.y = swap;
+				}
 				Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
-				StringSelection content = new StringSelection(
-						"\"x\":" + cell_coordinate.x + ", \"y\":" + cell_coordinate.y + " ");
-				clipboard.setContents(content, null);
+				String content;
+
+				if (cell_coord_1.equals(cell_coord_2)) {
+					content = "\"x\":" + final_cell_coordinate.x + ", \"y\":"
+							+ final_cell_coordinate.y + " ";
+				} else {
+					content = "\"x\": [" + cell_coord_1.x + ", " + cell_coord_2.x + "], \"y\": ["
+							+ cell_coord_1.y + ", " + cell_coord_2.y + "] ";
+				}
+				content = JOptionPane.showInputDialog(this,
+						"The following text is copied to the clipboard:", content);
+				if (content != null) {
+					clipboard.setContents(new StringSelection(content), null);
+				}
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
@@ -1055,5 +1107,4 @@ public class Editor extends JFrame implements WindowListener, PrefabRenderPanel.
 			e.printStackTrace();
 		}
 	}
-
 }

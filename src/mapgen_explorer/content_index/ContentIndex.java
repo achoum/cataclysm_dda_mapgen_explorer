@@ -113,7 +113,7 @@ public class ContentIndex {
 	}
 
 	public void update(String main_directory) {
-		Resources.palette_templates.clear();
+		Resources.indexed_palette_templates.clear();
 		Loading loading = new Loading("Indexing content");
 		Thread progress_bar_thread = new Thread() {
 			@Override
@@ -285,7 +285,7 @@ public class ContentIndex {
 			} else if (type.equals("palette")) {
 				String id = (String) item_json.get("id");
 				json_file.palettes.add(new Palette(json_file.file, item_idx, id));
-				Resources.palette_templates.addNewTemplate(id,item_json);
+				Resources.indexed_palette_templates.addNewTemplate(id,item_json);
 			}
 		}
 	}

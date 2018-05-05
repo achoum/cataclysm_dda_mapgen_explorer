@@ -24,20 +24,24 @@ public class PaletteTemplates {
 			JSONParser parser = new JSONParser();
 			FileReader reader = new FileReader(palette_file);
 			JSONArray content_array = (JSONArray) parser.parse(reader);
-			for (int item_idx = 0; item_idx < content_array.size(); item_idx++) {
-				Object item = content_array.get(item_idx);
-				if (!(item instanceof JSONObject))
-					continue;
-				JSONObject item_json = (JSONObject) item;
-				if (!("palette".equals(item_json.get("type")))) {
-					continue;
-				}
-				String id = (String) item_json.get("id");
-				Palette palette = new Palette();
-				palette.loadFromContentObject(item_json);
-				palettes.put(id, palette);
-			}
 			reader.close();
+			loadFromContentArray(content_array);
+		}
+	}
+
+	public void loadFromContentArray(JSONArray content_array) throws Exception {
+		for (int item_idx = 0; item_idx < content_array.size(); item_idx++) {
+			Object item = content_array.get(item_idx);
+			if (!(item instanceof JSONObject))
+				continue;
+			JSONObject item_json = (JSONObject) item;
+			if (!("palette".equals(item_json.get("type")))) {
+				continue;
+			}
+			String id = (String) item_json.get("id");
+			Palette palette = new Palette();
+			palette.loadFromContentObject(item_json);
+			palettes.put(id, palette);
 		}
 	}
 

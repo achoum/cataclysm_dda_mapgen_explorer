@@ -30,9 +30,6 @@ public class JsonValidator {
 				throw new Exception("Not a prefab");
 			JSONArray content_array = (JSONArray) content;
 
-			Palette global_palette = new Palette();
-			global_palette.loadFromJsonContentArray(content_array);
-
 			for (int entry_idx = 0; entry_idx < content_array.size(); entry_idx++) {
 				try {
 					Object entry = content_array.get(entry_idx);
@@ -41,7 +38,7 @@ public class JsonValidator {
 					JSONObject json_entry = (JSONObject) entry;
 					String type = (String) json_entry.get("type");
 					if (type.equals("mapgen")) {
-						checkErrorMapGen(main_directory, json_entry, global_palette, tmp_buffer);
+						checkErrorMapGen(main_directory, json_entry, content_array, tmp_buffer);
 					}
 
 				} catch (Exception e) {
@@ -58,12 +55,11 @@ public class JsonValidator {
 	}
 
 	static void checkErrorMapGen(String main_directory, JSONObject json_entry,
-			Palette global_palette, BufferedImage tmp_buffer) throws Exception {
+			JSONArray content_array, BufferedImage tmp_buffer) throws Exception {
 		if (!ContentIndex.fieldIsStringValue(json_entry, "method", "json"))
 			return;
 		Palette entry_palette = new Palette();
-		entry_palette.loadFromPrefab(main_directory, json_entry);
-		entry_palette.importPalette(global_palette);
+		entry_palette.loadFromPrefab(main_directory, json_entry, content_array);
 		PrefabRendering rendering = new PrefabRendering(json_entry, entry_palette);
 		rendering.update();
 		rendering.render((Graphics2D) tmp_buffer.getGraphics(), 0, 0, tmp_buffer.getWidth(),

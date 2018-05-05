@@ -73,23 +73,19 @@ public class PaletteExplorer extends JFrame {
 			"Num. of use" };
 	static int SYMBOL_COL_IDX = 2;
 	static int CHARACTER_COL_IDX = 3;
+	private JCheckBox hide_terrain_with_fournitures;
 
 	public static void main(String[] args) {
 		EventQueue.invokeLater(new Runnable() {
 			public void run() {
 				try {
-
 					String main_directory = "D:/games/Cataclysm/cataclysmdda-0.C-7328";
-
-					ContentIndex.Prefab to_open = new ContentIndex.Prefab(new File(
-							"D:/games/Cataclysm/cataclysmdda-0.C-7328/data/json/mapgen/apartment_con.json"),
-							0, "bandit_cabin");
-
 					JSONParser parser = new JSONParser();
 
 					ContentIndex.Prefab prefab = new ContentIndex.Prefab(new File(
-							"D:/games/Cataclysm/cataclysmdda-0.C-7328/data/json/mapgen/apartment_con.json"),
-							0, "bandit_cabin");
+							"D:/games/Cataclysm/Cataclysm-DDA/data/json/mapgen/bike_shop.json"), 0,
+							"bandit_cabin");
+					Resources.static_init(main_directory);
 
 					FileReader reader = new FileReader(prefab.file);
 					Object content = parser.parse(reader);
@@ -104,8 +100,7 @@ public class PaletteExplorer extends JFrame {
 					JSONObject json_prefab = (JSONObject) item;
 
 					Palette palette = new Palette();
-					palette.loadFromPrefab(main_directory, json_prefab);
-					palette.loadFromJsonContentArray(content_array);
+					palette.loadFromPrefab(main_directory, json_prefab, content_array);
 
 					UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
 					Resources.static_init(main_directory);
@@ -161,7 +156,7 @@ public class PaletteExplorer extends JFrame {
 		setTitle("Palette Explorer");
 		setIconImage(Toolkit.getDefaultToolkit().getImage(
 				PaletteExplorer.class.getResource("/mapgen_explorer/resources/palette.png")));
-		setBounds(100, 100, 570, 735);
+		setBounds(100, 100, 624, 735);
 		contentPane = new JPanel();
 		contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
 		setContentPane(contentPane);
@@ -238,6 +233,15 @@ public class PaletteExplorer extends JFrame {
 				refreshTable();
 			}
 		});
+
+		hide_terrain_with_fournitures = new JCheckBox("Hide terrains with furnitures");
+		hide_terrain_with_fournitures.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent arg0) {
+				refreshTable();
+			}
+		});
+		hide_terrain_with_fournitures.setSelected(true);
+		toolBar.add(hide_terrain_with_fournitures);
 		chckbxShowTilesWithout.setSelected(true);
 		toolBar.add(chckbxShowTilesWithout);
 		refreshTable();
@@ -270,7 +274,7 @@ public class PaletteExplorer extends JFrame {
 			number_of_use = editor.prefab_preview.rendering.getCharacterUsageMap();
 		}
 
-		// Build index symbol -> character + layer
+		// Build index "symbol -> character + layer" for the palettes.
 		class CharacterAndLayer {
 			public char character;
 			public eLayer layer;
@@ -285,7 +289,22 @@ public class PaletteExplorer extends JFrame {
 		HashMap<String, ArrayList<CharacterAndLayer>> symbol_to_character = new HashMap<>();
 		for (Entry<Character, ArrayList<Item>> symbol_set_1 : palette.char_to_id.entrySet()) {
 			char character = symbol_set_1.getKey();
+
+			boolean has_non_terrains = false;
+			if (hide_terrain_with_fournitures.isSelected()) {
+				for (Item symbol_set_2 : symbol_set_1.getValue()) {
+					if (symbol_set_2.layer != eLayer.TERRAIN) {
+						has_non_terrains = true;
+						break;
+					}
+				}
+			}
+
 			for (Item symbol_set_2 : symbol_set_1.getValue()) {
+				if (symbol_set_2.layer == eLayer.TERRAIN && has_non_terrains) {
+					continue;
+				}
+
 				for (String symbol : symbol_set_2.entries) {
 					ArrayList<CharacterAndLayer> item_set = symbol_to_character.get(symbol);
 					if (item_set == null) {
@@ -301,10 +320,12 @@ public class PaletteExplorer extends JFrame {
 		for (Entry<String, Tile> tile : Resources.tiles.tiles.entrySet()) {
 			String symbol = tile.getKey();
 			ArrayList<CharacterAndLayer> characters_and_layer = symbol_to_character.get(symbol);
+			boolean is_fill_ter = symbol.equals(palette.fill_ter);
 			if (characters_and_layer == null) {
-				if (!chckbxShowTilesWithout.isSelected()) {
+				if (!chckbxShowTilesWithout.isSelected() || is_fill_ter) {
 					Object[] row = new Object[] { tile.getValue().getIcon(true),
-							tile.getValue().getIcon(false), symbol, "", "", "", 0 };
+							tile.getValue().getIcon(false), symbol, is_fill_ter ? "fill_ter" : "",
+							"", "", 0 };
 					data.add(row);
 				}
 			} else {
@@ -368,7 +389,7 @@ public class PaletteExplorer extends JFrame {
 	public void setPalette(PaletteTemplates palette_templates) {
 		palette = new Palette();
 		for (Entry<String, Palette> other : palette_templates.palettes.entrySet()) {
-			palette.importPalette(other.getValue());
+			palette.mergePalette(other.getValue());
 		}
 		setPalette(palette);
 		chckbxShowTilesWithout.setSelected(false);

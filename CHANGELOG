@@ -1,3 +1,15 @@
+Version 0.6 (5 May 2018)
+	New features
+	- "Hide terrains with furnitures" option in the palette explorer.
+	- Tile defined "fill_ter" is shown when selecting the option "Only show defined in prefab".
+	- The fields of the palette explorer are editable and should allow for easier copy/pasting. Note: the modifications are only visual i.e. the acctual palettes are not modified. 
+	- The "coordinate seletor" tool displays an input box with the coordinates (in addition of setting the clipboard).
+	- The "coordinate selector" supports areas (in addition to points) using mouse press and drag.
+
+	Bug Fixes
+	- Duplicates of palette entries when loading (and reloading) prefab.
+	- Missing "rows" field appears with a proper warning text (instead of "null pointer exception") in the error log. 
+	
 Version 0.5 (2 May 2018)
 	New features
 	- Palette Explorer. Visualize the tiles, the palettes and their usage (for global templates and palette in mapgens). Replaces the terrain selector in the editor.

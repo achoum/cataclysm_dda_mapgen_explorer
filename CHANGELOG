@@ -3,6 +3,7 @@ Version 0.7 (3 May 2020)
 	- Support multiple default tilesets (instead of one).
 	- If none of the default tilesets are found, defaults to ASCII tileset.
 	- Add support for new Array[name:String, chance:Long] format used by some prefabs.
+	- Add junit4 in the set of packaged libraries.
 
 Version 0.6 (5 May 2018)
 	New features

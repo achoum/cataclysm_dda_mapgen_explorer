@@ -34,7 +34,7 @@ public class Resources {
 		icons.palette = getIcon("palette.png");
 		icons.missing = getIcon("missing.png");
 		tiles = new Tiles();
-		tiles.load(main_directory, Config.default_tileset);
+		tiles.load(main_directory, Config.default_tilesets);
 		global_palette_templates = new PaletteTemplates();
 		indexed_palette_templates = new PaletteTemplates();
 		global_palette_templates

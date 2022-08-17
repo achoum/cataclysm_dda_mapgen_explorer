@@ -1,6 +1,3 @@
-This is a test. do not submit.
-hello world.
-
 # Mapgen Explorer for Cataclysm DDA
 
 **Mapgen Explorer for Cataclysm DDA** in an explorer, visualizer and editor of **mapgens** (or **prefabs** i.e. the building templates for used by the world generator) for the [Cataclysm: Dark Days Ahead](https://github.com/CleverRaven/Cataclysm-DDA) game.
